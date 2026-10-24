@@ -22,3 +22,6 @@ export function isDnsDonorPreset(value: string): boolean {
 export function getDnsDonorLabel(value: string): string | undefined {
   return DNS_DONORS.find((donor) => donor.value === value)?.label;
 }
+
+// ChatGPT is not available from these countries, so a connection exiting there does not help.
+export const BLOCKED_COUNTRIES: ReadonlySet<string> = new Set(["RU", "BY"]);

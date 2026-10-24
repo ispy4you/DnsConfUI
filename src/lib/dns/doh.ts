@@ -115,24 +115,28 @@ export function resolveA(dohUrl: string, name: string, timeoutMs: number): Promi
   });
 }
 
-/** Extracts the visitor country from a raw Cloudflare /cdn-cgi/trace HTTP response. */
-export function parseTraceCountry(response: string): string | null {
+/** Extracts the visitor country and IP from a raw Cloudflare /cdn-cgi/trace HTTP response. */
+export function parseTrace(response: string): { country: string; ip: string } | null {
   if (!/^HTTP\/1\.[01] 200 /.test(response)) return null;
-  return /^loc=([A-Z]{2})\r?$/m.exec(response)?.[1] ?? null;
+  const country = /^loc=([A-Z]{2})\r?$/m.exec(response)?.[1];
+  const ip = /^ip=([\da-fA-F.:]+)\r?$/m.exec(response)?.[1];
+  return country && ip ? { country, ip } : null;
 }
 
+type Trace = { country: string; ip: string; ms: number };
+
 /**
- * Requests https://{host}/cdn-cgi/trace from `ip` (valid certificate required) and returns the country
+ * Requests https://{host}/cdn-cgi/trace from `ip` (valid certificate required) and returns the country and IP
  * Cloudflare sees the connection coming from, which is the proxy exit when the donor proxies the host.
  */
-export function traceCountry(ip: string, host: string, timeoutMs: number): Promise<{ country: string; ms: number } | null> {
+export function traceCountry(ip: string, host: string, timeoutMs: number): Promise<Trace | null> {
   return new Promise((resolve) => {
     const started = Date.now();
     const socket = tls.connect({ host: ip, port: 443, servername: host, ALPNProtocols: ["http/1.1"] });
     // The socket idle timeout does not always fire while connecting, so a hard deadline is used.
     const timer = setTimeout(() => finish(null), timeoutMs);
     let response = "";
-    function finish(result: { country: string; ms: number } | null) {
+    function finish(result: Trace | null) {
       clearTimeout(timer);
       socket.destroy();
       resolve(result);
@@ -146,8 +150,8 @@ export function traceCountry(ip: string, host: string, timeoutMs: number): Promi
       if (response.length > MAX_RESPONSE_BYTES) finish(null);
     });
     socket.once("end", () => {
-      const country = parseTraceCountry(response);
-      finish(country ? { country, ms: Date.now() - started } : null);
+      const trace = parseTrace(response);
+      finish(trace ? { ...trace, ms: Date.now() - started } : null);
     });
     socket.once("error", () => finish(null));
   });

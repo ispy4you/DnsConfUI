@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { encodeAQuery, isPublicAddress, parseARecords, parseTraceCountry, resolveA } from "./doh";
+import { encodeAQuery, isPublicAddress, parseARecords, parseTrace, resolveA } from "./doh";
 
 function answer(type: number, data: number[]) {
   // Name as a compression pointer to the question at offset 12, class IN, TTL 60.
@@ -42,17 +42,17 @@ describe("parseARecords", () => {
   });
 });
 
-describe("parseTraceCountry", () => {
+describe("parseTrace", () => {
   const trace = (status: string, body: string) => `HTTP/1.1 ${status}\r\nContent-Type: text/plain\r\n\r\n${body}`;
 
-  it("returns the visitor country from a successful trace", () => {
-    expect(parseTraceCountry(trace("200 OK", "fl=1\nip=203.0.113.7\nloc=NL\ntls=TLSv1.3\n"))).toBe("NL");
+  it("returns the visitor country and IP from a successful trace", () => {
+    expect(parseTrace(trace("200 OK", "fl=1\nip=203.0.113.7\nloc=NL\ntls=TLSv1.3\n"))).toEqual({ country: "NL", ip: "203.0.113.7" });
   });
 
   it("ignores failed responses and bodies without a country", () => {
-    expect(parseTraceCountry(trace("403 Forbidden", "loc=NL\n"))).toBeNull();
-    expect(parseTraceCountry(trace("200 OK", "fl=1\nip=203.0.113.7\n"))).toBeNull();
-    expect(parseTraceCountry("")).toBeNull();
+    expect(parseTrace(trace("403 Forbidden", "loc=NL\n"))).toBeNull();
+    expect(parseTrace(trace("200 OK", "fl=1\nip=203.0.113.7\n"))).toBeNull();
+    expect(parseTrace("")).toBeNull();
   });
 });
 

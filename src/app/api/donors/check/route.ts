@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { isDnsDonorPreset } from "@/domain/dns-donors";
+import { BLOCKED_COUNTRIES, isDnsDonorPreset } from "@/domain/dns-donors";
 import { isPublicAddress, resolveA, traceCountry } from "@/lib/dns/doh";
 
 const CHECK_HOST = "chatgpt.com";
 const TIMEOUT_MS = 5000;
 const MAX_IN_FLIGHT = 50;
-// ChatGPT is not available from these countries, so a donor exiting there does not help.
-const BLOCKED_COUNTRIES = new Set(["RU", "BY"]);
 
 // Presets, or any HTTPS DoH URL a user wants to try; resolveA refuses servers on non-public addresses.
 function isCheckableDonor(value: string): boolean {
@@ -23,34 +21,62 @@ function isCheckableDonor(value: string): boolean {
 
 const requestSchema = z.object({ donor: z.string().refine(isCheckableDonor) });
 
-/** Elapsed milliseconds for each passed check (null when failed) and the exit country chatgpt.com saw. */
-type CheckResult = { dnsMs: number | null; chatgptMs: number | null; country: string | null };
+/**
+ * Elapsed milliseconds for each passed check (null when failed) and the exit country chatgpt.com saw.
+ * `direct` means the DNS does not proxy chatgpt.com: the connection leaves from wherever the user is, so the
+ * country is left to the browser to fill in instead of reporting this server's own location.
+ * `ips` are the chatgpt.com addresses that were tried, so the user can test the same ones from their network.
+ */
+type CheckResult = { dnsMs: number | null; chatgptMs: number | null; country: string | null; direct: boolean; ips: string[] };
+
+const FAILED: CheckResult = { dnsMs: null, chatgptMs: null, country: null, direct: false, ips: [] };
+const EXIT_IP_TTL_MS = 5 * 60_000;
 
 // Concurrent requests for a donor share one check, so repeated calls cannot multiply outbound connections.
 const inFlight = new Map<string, Promise<CheckResult>>();
 
+let exitIp: { expires: number; ip: Promise<string | null> } | null = null;
+
+// This server's own exit IP, as Cloudflare sees it when no proxy is involved.
+function serverExitIp(): Promise<string | null> {
+  if (!exitIp || exitIp.expires <= Date.now()) {
+    exitIp = {
+      expires: Date.now() + EXIT_IP_TTL_MS,
+      ip: traceCountry("1.1.1.1", "one.one.one.one", TIMEOUT_MS).then((trace) => trace?.ip ?? null)
+    };
+  }
+  return exitIp.ip;
+}
+
 async function check(donor: string): Promise<CheckResult> {
+  const ownIp = serverExitIp();
   const started = Date.now();
   let addresses: string[];
   try {
     addresses = await resolveA(donor, CHECK_HOST, TIMEOUT_MS);
   } catch {
-    return { dnsMs: null, chatgptMs: null, country: null };
+    return FAILED;
   }
   const dnsMs = Date.now() - started;
 
   // A custom DoH server can answer with any address, so internal ones are never contacted.
-  const traces = addresses.filter(isPublicAddress).slice(0, 4).map((ip) => traceCountry(ip, CHECK_HOST, TIMEOUT_MS));
+  const candidates = addresses.filter(isPublicAddress).slice(0, 4);
+  const traces = candidates.map((ip) => traceCountry(ip, CHECK_HOST, TIMEOUT_MS));
+  const serverIp = await ownIp;
+  const isDirect = (trace: { ip: string }) => trace.ip === serverIp;
   // Settle on the first usable address instead of waiting for dead ones to time out.
-  const passed = await Promise.any(traces.map(async (trace) => {
-    const result = await trace;
-    if (!result || BLOCKED_COUNTRIES.has(result.country)) throw new Error("Unusable address.");
-    return result;
+  const passed = await Promise.any(traces.map(async (pending) => {
+    const trace = await pending;
+    if (!trace || (!isDirect(trace) && BLOCKED_COUNTRIES.has(trace.country))) throw new Error("Unusable address.");
+    return trace;
   })).catch(() => null);
-  if (passed) return { dnsMs, chatgptMs: passed.ms, country: passed.country };
+  if (passed) {
+    const direct = isDirect(passed);
+    return { dnsMs, chatgptMs: passed.ms, country: direct ? null : passed.country, direct, ips: candidates };
+  }
 
-  const blocked = (await Promise.all(traces)).find(Boolean);
-  return { dnsMs, chatgptMs: null, country: blocked?.country ?? null };
+  const answered = (await Promise.all(traces)).find(Boolean);
+  return { ...FAILED, dnsMs, country: answered?.country ?? null, ips: candidates };
 }
 
 export async function POST(request: Request) {

@@ -13,7 +13,7 @@ const checks = vi.hoisted(() => ({
 
 const checkDonor = vi.hoisted(() => vi.fn());
 
-vi.mock("@/lib/dns/donor-check", () => ({ checkDonor }));
+vi.mock("@/lib/dns/donor-check", () => ({ checkDonor, visitorCountry: () => Promise.resolve("UZ") }));
 
 function renderSelect(value: string = DNS_DONORS[0].value) {
   const onChange = vi.fn();
@@ -35,16 +35,16 @@ describe("DonorSelect", () => {
     const { combobox } = renderSelect();
     fireEvent.click(combobox);
 
-    expect(await screen.findByRole("option", { name: "GeoHide RU. DNS: отвечает, 120 мс. chatgpt.com: не открывается" }))
+    expect(await screen.findByRole("option", { name: "GeoHide RU. DNS: отвечает, 120 мс. ChatGPT: не открывается" }))
       .toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("option", { name: "GeoHide EU. DNS: отвечает, 80 мс. chatgpt.com: открывается через DE, 45 мс" }))
+    expect(screen.getByRole("option", { name: "GeoHide EU. DNS: отвечает, 80 мс. ChatGPT: открывается через DE, 45 мс" }))
       .toHaveTextContent(/80 мс.*DE45 мс$/);
-    expect(screen.getByRole("option", { name: "DNS-AI. DNS: отвечает, 60 мс. chatgpt.com: подключение через RU, ChatGPT там не работает" }))
+    expect(screen.getByRole("option", { name: "DNS-AI. DNS: отвечает, 60 мс. ChatGPT: подключение через RU, там он не работает" }))
       .toHaveTextContent(/60 мс.*RU$/);
-    expect(screen.getByRole("option", { name: "GeoHide US. DNS: не отвечает. chatgpt.com: не открывается" })).toBeVisible();
-    expect(screen.getByRole("option", { name: "Comss. DNS: проверяется. chatgpt.com: проверяется" })).toBeVisible();
+    expect(screen.getByRole("option", { name: "GeoHide US. DNS: не отвечает. ChatGPT: не открывается" })).toBeVisible();
+    expect(screen.getByRole("option", { name: "Comss. DNS: проверяется. ChatGPT: проверяется" })).toBeVisible();
     expect(screen.getAllByRole("option")).toHaveLength(DNS_DONORS.length);
-    expect(screen.getByRole("note", { name: "Проверка доступности DNS и chatgpt.com" })).toBeInTheDocument();
+    expect(screen.getByRole("note", { name: "Работают ли DNS для доступа к ChatGPT" })).toBeInTheDocument();
     expect(screen.getByRole("note", { name: /по DoH/ })).toBeInTheDocument();
     expect(screen.getByRole("note", { name: /cdn-cgi\/trace/ })).toBeInTheDocument();
   });
