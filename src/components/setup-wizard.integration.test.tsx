@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   loadExistingDnsConfSetup: vi.fn()
 }));
 
+vi.mock("@/lib/dns/donor-check", () => ({ checkDonor: () => new Promise(() => {}) }));
+
 vi.mock("./auth-provider", () => ({
   useAuth: () => ({ token: "github-token" })
 }));
@@ -66,7 +68,7 @@ describe("SetupWizard retained navigation", () => {
     expect(screen.queryByRole("button", {
       name: "Обратно к настройке без учётных данных"
     })).not.toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "DNS-донор" })).toHaveValue(DEFAULT_DNS_DONOR);
+    expect(screen.getByRole("combobox", { name: "DNS-донор" })).toHaveAttribute("title", DEFAULT_DNS_DONOR);
   });
 
   it("preserves every geo-blocking source after disabling and re-enabling the feature", async () => {

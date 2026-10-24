@@ -4,7 +4,7 @@ import { CheckCircle2, ChevronDown, Loader2, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { UseFormSetValue } from "react-hook-form";
 import type { DnsConfConfig } from "@/domain/dnsconf-config";
-import { DEFAULT_DNS_DONOR, DNS_DONORS, isDnsDonorPreset } from "@/domain/dns-donors";
+import { DEFAULT_DNS_DONOR } from "@/domain/dns-donors";
 import { validateCredentials } from "@/lib/nextdns/api";
 import { useLocale } from "@/lib/i18n/context";
 import { Field, inputClass } from "@/components/ui";
@@ -12,6 +12,7 @@ import { CLOUDFLARE_CLIENT_ID_LENGTH, NEXTDNS_CLIENT_ID_LENGTH } from "@/lib/con
 import { translatedError } from "./utils";
 import { ScriptBehaviour } from "./script-behaviour";
 import { ToggleSwitch } from "./toggle-switch";
+import { DonorSelect } from "./donor-select";
 import { Tooltip } from "@/components/ui/tooltip";
 
 export function ProfilesSection({
@@ -248,22 +249,11 @@ export function ProfilesSection({
               labelNowrap
             >
               {profiles[selected].donorDns ? (
-                <select
-                  className="h-5 w-56 min-w-0 max-w-full rounded-md border border-line bg-white px-2 text-xs text-ink outline-none focus:border-steel focus:ring-2 focus:ring-steel/20"
+                <DonorSelect
                   value={profiles[selected].donorDns}
-                  onChange={(e) => update(selected, "donorDns", e.target.value)}
-                  aria-label={t('profiles.donor')}
-                  title={profiles[selected].donorDns}
-                >
-                  {!isDnsDonorPreset(profiles[selected].donorDns) ? (
-                    <option value={profiles[selected].donorDns}>
-                      {t('profiles.donorCustom')}: {profiles[selected].donorDns}
-                    </option>
-                  ) : null}
-                  {DNS_DONORS.map((donor) => (
-                    <option key={donor.value} value={donor.value}>{donor.label}</option>
-                  ))}
-                </select>
+                  onChange={(value) => update(selected, "donorDns", value)}
+                  label={t('profiles.donor')}
+                />
               ) : null}
             </ToggleSwitch>
           ) : (
