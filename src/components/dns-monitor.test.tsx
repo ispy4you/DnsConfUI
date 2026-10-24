@@ -44,4 +44,54 @@ describe("DnsMonitor", () => {
 
     expect(checkDonor).toHaveBeenCalledTimes(DNS_DONORS.length * 2);
   });
+
+  it("explains an address that is not an HTTPS URL", () => {
+    renderMonitor();
+    const input = screen.getByRole("textbox", { name: "Проверить свой DoH" });
+
+    fireEvent.change(input, { target: { value: "http://dns.example/dns-query" } });
+    fireEvent.click(screen.getByRole("button", { name: "Проверить" }));
+
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAccessibleDescription("Введите адрес DoH вида https://example.com/dns-query");
+    expect(checkDonor).toHaveBeenCalledTimes(DNS_DONORS.length);
+  });
+
+  it("checks a custom DoH, rechecks it with the presets and removes it", async () => {
+    const custom = "https://dns.example/dns-query";
+    renderMonitor();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Проверить свой DoH" }), { target: { value: ` ${custom} ` } });
+    fireEvent.click(screen.getByRole("button", { name: "Проверить" }));
+
+    expect(checkDonor).toHaveBeenLastCalledWith(custom);
+    const row = await screen.findByRole("row", { name: /dns\.example/ });
+    expect(within(row).getByText("chatgpt.com: открывается через NL, 300 мс")).toBeInTheDocument();
+
+    await screen.findAllByText("DNS: отвечает, 90 мс");
+    fireEvent.click(screen.getByRole("button", { name: "Проверить снова" }));
+    expect(checkDonor).toHaveBeenCalledTimes(DNS_DONORS.length * 2 + 2);
+
+    fireEvent.click(within(row).getByRole("button", { name: "Убрать свой DoH" }));
+    expect(screen.queryByRole("row", { name: /dns\.example/ })).not.toBeInTheDocument();
+  });
+
+  it("treats an address without a scheme as HTTPS", () => {
+    renderMonitor();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Проверить свой DoH" }), { target: { value: "dns.example/dns-query" } });
+    fireEvent.click(screen.getByRole("button", { name: "Проверить" }));
+
+    expect(checkDonor).toHaveBeenLastCalledWith("https://dns.example/dns-query");
+  });
+
+  it("rechecks a preset in place instead of adding it twice", () => {
+    renderMonitor();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Проверить свой DoH" }), { target: { value: DNS_DONORS[0].value } });
+    fireEvent.click(screen.getByRole("button", { name: "Проверить" }));
+
+    expect(screen.getAllByRole("row")).toHaveLength(DNS_DONORS.length + 1);
+    expect(checkDonor).toHaveBeenLastCalledWith(DNS_DONORS[0].value);
+  });
 });

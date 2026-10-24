@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { encodeAQuery, parseARecords, parseTraceCountry } from "./doh";
+import { encodeAQuery, isPublicAddress, parseARecords, parseTraceCountry, resolveA } from "./doh";
 
 function answer(type: number, data: number[]) {
   // Name as a compression pointer to the question at offset 12, class IN, TTL 60.
@@ -53,5 +53,26 @@ describe("parseTraceCountry", () => {
     expect(parseTraceCountry(trace("403 Forbidden", "loc=NL\n"))).toBeNull();
     expect(parseTraceCountry(trace("200 OK", "fl=1\nip=203.0.113.7\n"))).toBeNull();
     expect(parseTraceCountry("")).toBeNull();
+  });
+});
+
+describe("isPublicAddress", () => {
+  it("accepts routable addresses", () => {
+    expect(isPublicAddress("94.249.177.102")).toBe(true);
+    expect(isPublicAddress("2606:4700::6810:84e5")).toBe(true);
+  });
+
+  it("rejects loopback, private, link-local, CGNAT and mapped internal addresses", () => {
+    for (const ip of ["127.0.0.1", "10.1.2.3", "172.20.0.1", "192.168.1.1", "169.254.169.254", "100.64.0.1", "0.0.0.0", "::1", "fd00::1", "fe80::1", "::ffff:127.0.0.1", "not-an-ip"]) {
+      expect(isPublicAddress(ip), ip).toBe(false);
+    }
+  });
+});
+
+describe("resolveA", () => {
+  it("refuses DoH servers on non-public addresses before sending anything", async () => {
+    await expect(resolveA("https://127.0.0.1/dns-query", "chatgpt.com", 1000)).rejects.toThrow("not public");
+    await expect(resolveA("https://[::1]/dns-query", "chatgpt.com", 1000)).rejects.toThrow("not public");
+    await expect(resolveA("https://localhost/dns-query", "chatgpt.com", 1000)).rejects.toThrow("non-public");
   });
 });
