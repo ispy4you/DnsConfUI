@@ -38,13 +38,15 @@ describe("DonorSelect", () => {
     expect(await screen.findByRole("option", { name: "GeoHide RU. DNS: отвечает, 120 мс. chatgpt.com: не открывается" }))
       .toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("option", { name: "GeoHide EU. DNS: отвечает, 80 мс. chatgpt.com: открывается через DE, 45 мс" }))
-      .toHaveTextContent("80 мсDE45 мс");
+      .toHaveTextContent(/80 мс.*DE45 мс$/);
     expect(screen.getByRole("option", { name: "DNS-AI. DNS: отвечает, 60 мс. chatgpt.com: подключение через RU, ChatGPT там не работает" }))
-      .toHaveTextContent("60 мсRU");
+      .toHaveTextContent(/60 мс.*RU$/);
     expect(screen.getByRole("option", { name: "GeoHide US. DNS: не отвечает. chatgpt.com: не открывается" })).toBeVisible();
     expect(screen.getByRole("option", { name: "Comss. DNS: проверяется. chatgpt.com: проверяется" })).toBeVisible();
     expect(screen.getAllByRole("option")).toHaveLength(DNS_DONORS.length);
-    expect(screen.getByRole("note")).toHaveAccessibleName("Проверка доступности донора и chatgpt.com");
+    expect(screen.getByRole("note", { name: "Проверка доступности DNS и chatgpt.com" })).toBeInTheDocument();
+    expect(screen.getByRole("note", { name: /по DoH/ })).toBeInTheDocument();
+    expect(screen.getByRole("note", { name: /cdn-cgi\/trace/ })).toBeInTheDocument();
   });
 
   it("runs the checks again every time the list opens", async () => {
