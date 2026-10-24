@@ -2,8 +2,8 @@
 
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DNS_DONORS } from "@/domain/dns-donors";
-import { checkDonor, type DonorCheck } from "@/lib/dns/donor-check";
+import { BLOCKED_COUNTRIES, DNS_DONORS } from "@/domain/dns-donors";
+import { checkDonor, visitorCountry, type DonorCheck } from "@/lib/dns/donor-check";
 import { useLocale } from "@/lib/i18n/context";
 import { cn } from "@/components/ui";
 
@@ -40,27 +40,41 @@ export function useDonorChecks() {
 
   const runChecks = useCallback((extra: string[] = []) => check([...PRESETS, ...extra]), [check]);
 
-  useEffect(() => () => { latest.current = {}; }, []);
+  const [visitor, setVisitor] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    visitorCountry().then((country) => { if (mounted) setVisitor(country); });
+    return () => {
+      mounted = false;
+      latest.current = {};
+    };
+  }, []);
 
   function statusOf(donor: string) {
     const check = checks[donor];
+    const direct = check?.direct ?? false;
+    // Without a proxy, chatgpt.com sees the visitor's own country, so the blocked-country rule applies to it.
+    const country = direct ? visitor : check?.country ?? null;
+    const chatgptMs = check ? (direct && country && BLOCKED_COUNTRIES.has(country) ? null : check.chatgptMs) : undefined;
     const dns = toStatus(check?.dnsMs);
-    const chatgpt = toStatus(check?.chatgptMs);
+    const chatgpt = toStatus(chatgptMs);
     const dnsKey = { checking: "profiles.donorCheckDnsChecking", ok: "profiles.donorCheckDnsOk", fail: "profiles.donorCheckDnsFail" } as const;
-    const country = check?.country ?? null;
     const chatgptKey = {
       checking: "profiles.donorCheckChatgptChecking",
-      ok: "profiles.donorCheckChatgptOk",
-      fail: country ? "profiles.donorCheckChatgptBlocked" : "profiles.donorCheckChatgptFail"
+      ok: direct ? (country ? "profiles.donorCheckChatgptDirect" : "profiles.donorCheckChatgptDirectUnknown") : "profiles.donorCheckChatgptOk",
+      fail: direct && country ? "profiles.donorCheckChatgptDirectBlocked" : country ? "profiles.donorCheckChatgptBlocked" : "profiles.donorCheckChatgptFail"
     } as const;
     return {
       dns,
       chatgpt,
       country,
+      direct,
+      ips: check?.ips ?? [],
       dnsMs: check?.dnsMs ?? null,
-      chatgptMs: check?.chatgptMs ?? null,
+      chatgptMs: chatgptMs ?? null,
       dnsText: t(dnsKey[dns], { ms: check?.dnsMs ?? 0 }),
-      chatgptText: t(chatgptKey[chatgpt], { ms: check?.chatgptMs ?? 0, country: country ?? "" })
+      chatgptText: t(chatgptKey[chatgpt], { ms: chatgptMs ?? 0, country: country ?? "" })
     };
   }
 
@@ -101,14 +115,14 @@ export function DnsCheck({ status }: { status: DonorStatus }) {
   );
 }
 
-export function ChatgptCheck({ status, className }: { status: DonorStatus; className?: string }) {
+export function ChatgptCheck({ status, className, compact = false }: { status: DonorStatus; className?: string; compact?: boolean }) {
   const { t } = useLocale();
   return (
     <span className={cn("flex items-center gap-1", className)}>
       <span className="sr-only">{status.chatgptText}</span>
       {/* Fixed slots keep the country codes lined up in one column across rows. */}
       <Detail className={cn("w-5 text-center font-medium", status.chatgpt === "fail" ? "text-coral" : "text-ink/60")}>{status.country}</Detail>
-      <Detail className="min-w-[2.75rem] text-right">
+      <Detail className={cn("min-w-[2.75rem] text-right", compact && "hidden sm:inline")}>
         {status.chatgptMs !== null ? t("profiles.donorCheckMs", { ms: status.chatgptMs }) : null}
       </Detail>
       <StatusIcon status={status.chatgpt} label={status.chatgptText} />

@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   loadExistingDnsConfSetup: vi.fn()
 }));
 
-vi.mock("@/lib/dns/donor-check", () => ({ checkDonor: () => new Promise(() => {}) }));
+vi.mock("@/lib/dns/donor-check", () => ({ checkDonor: () => new Promise(() => {}), visitorCountry: () => new Promise(() => {}) }));
 
 vi.mock("./auth-provider", () => ({
   useAuth: () => ({ token: "github-token" })

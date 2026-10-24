@@ -36,9 +36,9 @@ describe("POST /api/donors/check", () => {
 
     const response = await POST(checkRequest({ donor: "https://dns.example/dns-query" }));
 
-    expect(await response.json()).toEqual({ dnsMs: expect.any(Number), chatgptMs: 70, country: "NL" });
-    expect(dohMocks.traceCountry).toHaveBeenCalledTimes(1);
-    expect(dohMocks.traceCountry).toHaveBeenCalledWith("203.0.113.9", "chatgpt.com", 5000);
+    expect(await response.json()).toMatchObject({ dnsMs: expect.any(Number), chatgptMs: 70, country: "NL", direct: false });
+    const contacted = dohMocks.traceCountry.mock.calls.filter(([, host]) => host === "chatgpt.com").map(([ip]) => ip);
+    expect(contacted).toEqual(["203.0.113.9"]);
   });
 
   it("passes with the exit country and timing of the first usable address", async () => {
@@ -47,7 +47,7 @@ describe("POST /api/donors/check", () => {
 
     const response = await POST(checkRequest({ donor: "https://dns.magicdns.ru/dns-query" }));
 
-    expect(await response.json()).toEqual({ dnsMs: expect.any(Number), chatgptMs: 42, country: "NL" });
+    expect(await response.json()).toMatchObject({ dnsMs: expect.any(Number), chatgptMs: 42, country: "NL", direct: false, ips: ["1.1.1.1", "2.2.2.2"] });
     expect(dohMocks.resolveA).toHaveBeenCalledWith("https://dns.magicdns.ru/dns-query", "chatgpt.com", 5000);
     expect(dohMocks.traceCountry).toHaveBeenCalledWith("2.2.2.2", "chatgpt.com", 5000);
   });
@@ -58,7 +58,7 @@ describe("POST /api/donors/check", () => {
 
     const response = await POST(checkRequest({ donor: "https://dns.dns-ai.ru/dns-query" }));
 
-    expect(await response.json()).toEqual({ dnsMs: expect.any(Number), chatgptMs: null, country });
+    expect(await response.json()).toMatchObject({ dnsMs: expect.any(Number), chatgptMs: null, country, direct: false });
   });
 
   it("prefers an address that exits in an allowed country", async () => {
@@ -67,7 +67,7 @@ describe("POST /api/donors/check", () => {
 
     const response = await POST(checkRequest({ donor: "https://geohide.ru/dns-query" }));
 
-    expect(await response.json()).toEqual({ dnsMs: expect.any(Number), chatgptMs: 50, country: "DE" });
+    expect(await response.json()).toMatchObject({ dnsMs: expect.any(Number), chatgptMs: 50, country: "DE", direct: false, ips: ["1.1.1.1", "2.2.2.2"] });
   });
 
   it("fails the chatgpt.com check when no address answers", async () => {
@@ -76,7 +76,7 @@ describe("POST /api/donors/check", () => {
 
     const response = await POST(checkRequest({ donor: "https://dns.zapret.moe/dns-query" }));
 
-    expect(await response.json()).toEqual({ dnsMs: expect.any(Number), chatgptMs: null, country: null });
+    expect(await response.json()).toMatchObject({ dnsMs: expect.any(Number), chatgptMs: null, country: null, direct: false, ips: ["1.1.1.1"] });
   });
 
   it("fails both checks when the donor does not resolve", async () => {
@@ -84,7 +84,7 @@ describe("POST /api/donors/check", () => {
 
     const response = await POST(checkRequest({ donor: "https://dns.dagami.ru/dns-query" }));
 
-    expect(await response.json()).toEqual({ dnsMs: null, chatgptMs: null, country: null });
+    expect(await response.json()).toEqual({ dnsMs: null, chatgptMs: null, country: null, direct: false, ips: [] });
     expect(dohMocks.traceCountry).not.toHaveBeenCalled();
   });
 
@@ -97,6 +97,21 @@ describe("POST /api/donors/check", () => {
 
     await POST(checkRequest(donor));
     expect(dohMocks.resolveA).toHaveBeenCalledTimes(2);
+  });
+
+  it("marks a DNS without a proxy as direct and leaves the country to the browser", async () => {
+    // Expire the cached server exit IP from earlier tests.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.now() + 10 * 60_000);
+    dohMocks.resolveA.mockResolvedValue(["104.18.32.47"]);
+    // The donor's chatgpt.com connection leaves from the same IP as the server's own trace: no proxy.
+    dohMocks.traceCountry.mockResolvedValue({ country: "RU", ip: "198.51.100.7", ms: 40 });
+
+    const response = await POST(checkRequest({ donor: "https://dns.adguard-dns.com/dns-query" }));
+
+    expect(await response.json()).toMatchObject({ dnsMs: expect.any(Number), chatgptMs: 40, country: null, direct: true });
+    expect(dohMocks.traceCountry).toHaveBeenCalledWith("1.1.1.1", "one.one.one.one", 5000);
+    vi.useRealTimers();
   });
 
   // Runs last: the checks it leaves hanging stay in flight for the rest of this file.

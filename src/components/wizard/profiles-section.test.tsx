@@ -9,7 +9,7 @@ const apiMocks = vi.hoisted(() => ({ validateCredentials: vi.fn() }));
 
 vi.mock("@/lib/nextdns/api", () => ({ validateCredentials: apiMocks.validateCredentials }));
 
-vi.mock("@/lib/dns/donor-check", () => ({ checkDonor: () => new Promise(() => {}) }));
+vi.mock("@/lib/dns/donor-check", () => ({ checkDonor: () => new Promise(() => {}), visitorCountry: () => new Promise(() => {}) }));
 
 const profile = {
   clientId: "",

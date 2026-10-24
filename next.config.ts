@@ -28,7 +28,7 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: https:",
       "font-src 'self'",
-      "connect-src 'self' https://github.com https://api.github.com ws:",
+      "connect-src 'self' https://github.com https://api.github.com https://1.1.1.1 ws:",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self' https://github.com"
