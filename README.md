@@ -42,7 +42,8 @@ chooses a full reconfiguration and provides the credentials again.
 
 ## DNS donor
 
-Quick mode enables GeoHide by default and also offers Xbox and Comss presets. Expert mode accepts
+Quick mode enables GeoHide RU by default and also offers GeoHide EU/US, Comss, MagicDNS, Bezmezhau,
+WLRUS, Malw, Dagami, DNS-AI and Zapret presets. Expert mode accepts
 an IPv4 address or a DNS-over-HTTPS URL. Donors are stored in the `DONOR_DNS` GitHub Actions variable
 in profile order; disabled profiles use `-` to preserve positional mapping.
 

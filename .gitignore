@@ -1,5 +1,8 @@
 node_modules
 .tools
+.claude
+AGENTS.md
+CLAUDE.md
 .next
 out
 dist
