@@ -5,14 +5,14 @@ describe("configFromDnsConfVariables", () => {
   it("restores profile order, providers, donors, and source variables", () => {
     expect(configFromDnsConfVariables({
       DNS: "nextdns,cloudflare",
-      DONOR_DNS: "-,https://xbox-dns.ru/dns-query",
+      DONOR_DNS: "-,https://dns.magicdns.ru/dns-query",
       BLOCK: "https://example.com/block-a,https://example.com/block-b",
       REDIRECT: "https://example.com/redirect",
       EXCLUDE_REDIRECT: "keep.example,another.example"
     })).toEqual({
       profiles: [
         { clientId: "", authSecret: "", provider: "nextdns", donorDns: "" },
-        { clientId: "", authSecret: "", provider: "cloudflare", donorDns: "https://xbox-dns.ru/dns-query" }
+        { clientId: "", authSecret: "", provider: "cloudflare", donorDns: "https://dns.magicdns.ru/dns-query" }
       ],
       blocklists: ["https://example.com/block-a", "https://example.com/block-b"],
       redirects: ["https://example.com/redirect"],
@@ -29,11 +29,11 @@ describe("configFromDnsConfVariables", () => {
   it("disables profiles missing a positional donor value", () => {
     const config = configFromDnsConfVariables({
       DNS: "cloudflare,nextdns",
-      DONOR_DNS: "https://xbox-dns.ru/dns-query"
+      DONOR_DNS: "https://dns.magicdns.ru/dns-query"
     });
 
     expect(config?.profiles.map((profile) => profile.donorDns)).toEqual([
-      "https://xbox-dns.ru/dns-query",
+      "https://dns.magicdns.ru/dns-query",
       ""
     ]);
   });

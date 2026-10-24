@@ -200,7 +200,7 @@ describe("buildDnsConfPayload", () => {
     const payload = buildDnsConfPayload({
       ...validConfig,
       profiles: [
-        { clientId: "11111111111111111111111111111111", authSecret: "sec1", provider: "cloudflare", donorDns: "https://xbox-dns.ru/dns-query" },
+        { clientId: "11111111111111111111111111111111", authSecret: "sec1", provider: "cloudflare", donorDns: "https://dns.magicdns.ru/dns-query" },
         { clientId: "abc123", authSecret: "sec2", provider: "nextdns", donorDns: "https://dns.comss.one/dns-query" }
       ]
     });
@@ -210,7 +210,7 @@ describe("buildDnsConfPayload", () => {
       AUTH_SECRET: "sec1,sec2"
     });
     expect(payload.variables.DNS).toBe("cloudflare,nextdns");
-    expect(payload.variables.DONOR_DNS).toBe("https://xbox-dns.ru/dns-query,https://dns.comss.one/dns-query");
+    expect(payload.variables.DONOR_DNS).toBe("https://dns.magicdns.ru/dns-query,https://dns.comss.one/dns-query");
   });
 
   it("keeps disabled donors positionally aligned for every profile", () => {

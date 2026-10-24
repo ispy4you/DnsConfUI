@@ -95,12 +95,12 @@ describe("ProfilesSection", () => {
     const { setValue } = renderSection();
 
     fireEvent.change(screen.getByRole("combobox", { name: "DNS-донор" }), {
-      target: { value: "https://xbox-dns.ru/dns-query" },
+      target: { value: "https://eu.geohide.ru/dns-query" },
     });
 
     expect(setValue).toHaveBeenCalledWith(
       "profiles",
-      [{ ...profile, donorDns: "https://xbox-dns.ru/dns-query" }],
+      [{ ...profile, donorDns: "https://eu.geohide.ru/dns-query" }],
       { shouldDirty: true, shouldValidate: true },
     );
   });
@@ -157,7 +157,7 @@ describe("ProfilesSection", () => {
   it("restores the DNS donor selected for every retained profile", () => {
     renderSection({
       profiles: [
-        { clientId: "", authSecret: "", provider: "nextdns", donorDns: "https://xbox-dns.ru/dns-query" },
+        { clientId: "", authSecret: "", provider: "nextdns", donorDns: "https://eu.geohide.ru/dns-query" },
         { clientId: "", authSecret: "", provider: "nextdns", donorDns: "https://dns.comss.one/dns-query" },
         { clientId: "", authSecret: "", provider: "nextdns", donorDns: "https://custom.test/dns-query" },
         { clientId: "", authSecret: "", provider: "nextdns", donorDns: "" }
@@ -165,7 +165,7 @@ describe("ProfilesSection", () => {
       retainCredentials: true
     });
 
-    expect(screen.getByRole("combobox", { name: "DNS-донор" })).toHaveValue("https://xbox-dns.ru/dns-query");
+    expect(screen.getByRole("combobox", { name: "DNS-донор" })).toHaveValue("https://eu.geohide.ru/dns-query");
 
     fireEvent.change(screen.getByRole("combobox", { name: "Выбрать профиль" }), { target: { value: "1" } });
     expect(screen.getByRole("combobox", { name: "DNS-донор" })).toHaveValue("https://dns.comss.one/dns-query");
