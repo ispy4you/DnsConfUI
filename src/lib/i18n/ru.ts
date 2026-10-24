@@ -35,6 +35,11 @@ export const locale: Record<LocaleKey, string> = {
   "monitor.title": "DNS-монитор",
   "monitor.refresh": "Проверить снова",
   "monitor.server": "DNS-сервер",
+  "monitor.custom.label": "Проверить свой DoH",
+  "monitor.custom.check": "Проверить",
+  "monitor.custom.invalid": "Введите адрес DoH вида https://example.com/dns-query",
+  "monitor.custom.remove": "Убрать свой DoH",
+  "monitor.custom.tag": "свой",
 
   "points.quick.title": "Быстрая настройка",
   "points.quick.text": "Укажите учетные данные — все остальное будет настроено автоматически.",

@@ -1,15 +1,27 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isDnsDonorPreset } from "@/domain/dns-donors";
-import { resolveA, traceCountry } from "@/lib/dns/doh";
+import { isPublicAddress, resolveA, traceCountry } from "@/lib/dns/doh";
 
 const CHECK_HOST = "chatgpt.com";
 const TIMEOUT_MS = 5000;
+const MAX_IN_FLIGHT = 50;
 // ChatGPT is not available from these countries, so a donor exiting there does not help.
 const BLOCKED_COUNTRIES = new Set(["RU", "BY"]);
 
-// Only presets are accepted so the route cannot be used to probe arbitrary hosts.
-const requestSchema = z.object({ donor: z.string().refine(isDnsDonorPreset) });
+// Presets, or any HTTPS DoH URL a user wants to try; resolveA refuses servers on non-public addresses.
+function isCheckableDonor(value: string): boolean {
+  if (isDnsDonorPreset(value)) return true;
+  if (value.length > 2048) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
+
+const requestSchema = z.object({ donor: z.string().refine(isCheckableDonor) });
 
 /** Elapsed milliseconds for each passed check (null when failed) and the exit country chatgpt.com saw. */
 type CheckResult = { dnsMs: number | null; chatgptMs: number | null; country: string | null };
@@ -27,7 +39,8 @@ async function check(donor: string): Promise<CheckResult> {
   }
   const dnsMs = Date.now() - started;
 
-  const traces = addresses.slice(0, 4).map((ip) => traceCountry(ip, CHECK_HOST, TIMEOUT_MS));
+  // A custom DoH server can answer with any address, so internal ones are never contacted.
+  const traces = addresses.filter(isPublicAddress).slice(0, 4).map((ip) => traceCountry(ip, CHECK_HOST, TIMEOUT_MS));
   // Settle on the first usable address instead of waiting for dead ones to time out.
   const passed = await Promise.any(traces.map(async (trace) => {
     const result = await trace;
@@ -45,12 +58,15 @@ export async function POST(request: Request) {
   const parsed = requestSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Unknown DNS donor." }, { status: 400 });
+    return NextResponse.json({ error: "Enter an HTTPS DoH URL." }, { status: 400 });
   }
 
   const { donor } = parsed.data;
   let result = inFlight.get(donor);
   if (!result) {
+    if (inFlight.size >= MAX_IN_FLIGHT) {
+      return NextResponse.json({ error: "Too many checks at once. Try again shortly." }, { status: 429 });
+    }
     result = check(donor).finally(() => inFlight.delete(donor));
     inFlight.set(donor, result);
   }

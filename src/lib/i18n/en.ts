@@ -33,6 +33,11 @@ export const locale = {
   "monitor.title": "DNS monitor",
   "monitor.refresh": "Check again",
   "monitor.server": "DNS server",
+  "monitor.custom.label": "Check your own DoH",
+  "monitor.custom.check": "Check",
+  "monitor.custom.invalid": "Enter a DoH address like https://example.com/dns-query",
+  "monitor.custom.remove": "Remove your DoH",
+  "monitor.custom.tag": "custom",
 
   "points.quick.title": "Quick setup",
   "points.quick.text": "Enter credentials\u2014everything else is configured automatically.",

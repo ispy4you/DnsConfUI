@@ -13,24 +13,34 @@ function toStatus(ms: number | null | undefined): Status {
   return ms === undefined ? "checking" : ms === null ? "fail" : "ok";
 }
 
-/** Runs the availability checks for every preset donor; `runChecks` starts a fresh round. */
+const PRESETS = DNS_DONORS.map((donor) => donor.value);
+
+/** Runs availability checks: `check` for the given DoH URLs, `runChecks` for every preset (plus `extra`). */
 export function useDonorChecks() {
   const { t } = useLocale();
-  const run = useRef(0);
+  const counter = useRef(0);
+  const latest = useRef<Record<string, number>>({});
   const [checks, setChecks] = useState<Record<string, DonorCheck>>({});
 
-  const runChecks = useCallback(() => {
-    // Results of an earlier run that arrive late are dropped.
-    const current = ++run.current;
-    setChecks({});
-    DNS_DONORS.forEach((donor) => {
-      checkDonor(donor.value).then((result) => {
-        if (run.current === current) setChecks((prev) => ({ ...prev, [donor.value]: result }));
+  const check = useCallback((donors: string[]) => {
+    setChecks((prev) => {
+      const next = { ...prev };
+      donors.forEach((donor) => delete next[donor]);
+      return next;
+    });
+    donors.forEach((donor) => {
+      // A late result from an earlier check of the same donor is dropped.
+      const id = ++counter.current;
+      latest.current[donor] = id;
+      checkDonor(donor).then((result) => {
+        if (latest.current[donor] === id) setChecks((prev) => ({ ...prev, [donor]: result }));
       });
     });
   }, []);
 
-  useEffect(() => () => { run.current++; }, []);
+  const runChecks = useCallback((extra: string[] = []) => check([...PRESETS, ...extra]), [check]);
+
+  useEffect(() => () => { latest.current = {}; }, []);
 
   function statusOf(donor: string) {
     const check = checks[donor];
@@ -54,7 +64,7 @@ export function useDonorChecks() {
     };
   }
 
-  return { runChecks, statusOf };
+  return { check, runChecks, statusOf };
 }
 
 export type DonorStatus = ReturnType<ReturnType<typeof useDonorChecks>["statusOf"]>;

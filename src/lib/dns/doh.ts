@@ -1,8 +1,36 @@
+import dns from "node:dns";
 import http2 from "node:http2";
+import { BlockList, isIP, type LookupFunction } from "node:net";
 import tls from "node:tls";
 
 const TYPE_A = 1;
 const MAX_RESPONSE_BYTES = 64 * 1024;
+
+const NON_PUBLIC = new BlockList();
+for (const [network, prefix] of [
+  ["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16], ["172.16.0.0", 12],
+  ["192.0.0.0", 24], ["192.168.0.0", 16], ["198.18.0.0", 15], ["224.0.0.0", 4], ["240.0.0.0", 4]
+] as const) NON_PUBLIC.addSubnet(network, prefix, "ipv4");
+for (const [network, prefix] of [["::", 128], ["::1", 128], ["fc00::", 7], ["fe80::", 10], ["ff00::", 8]] as const) {
+  NON_PUBLIC.addSubnet(network, prefix, "ipv6");
+}
+
+/** False for loopback, private, link-local, multicast and other non-routable addresses. */
+export function isPublicAddress(ip: string): boolean {
+  const address = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip)?.[1] ?? ip;
+  const family = isIP(address);
+  return family !== 0 && !NON_PUBLIC.check(address, family === 4 ? "ipv4" : "ipv6");
+}
+
+// Checked in the lookup the connection itself uses, so a hostname cannot pass a check and then resolve elsewhere.
+const publicLookup = ((hostname, options, callback) => {
+  dns.lookup(hostname, options, (error, address, family) => {
+    if (error) return callback(error, address, family);
+    const addresses = Array.isArray(address) ? address.map((entry) => entry.address) : [address];
+    if (!addresses.every(isPublicAddress)) return callback(new Error(`${hostname} resolves to a non-public address.`), address, family);
+    callback(null, address, family);
+  });
+}) as LookupFunction;
 
 export function encodeAQuery(name: string): Buffer {
   const labels = name.split(".").flatMap((label) => [label.length, ...Buffer.from(label)]);
@@ -48,7 +76,10 @@ export function parseARecords(packet: Buffer): string[] {
 export function resolveA(dohUrl: string, name: string, timeoutMs: number): Promise<string[]> {
   return new Promise((resolve, reject) => {
     const url = new URL(dohUrl);
-    const session = http2.connect(url.origin);
+    const literal = url.hostname.replace(/^\[|\]$/g, "");
+    // IP literals skip the lookup, so they are checked here.
+    if (isIP(literal) && !isPublicAddress(literal)) return reject(new Error("DoH server address is not public."));
+    const session = http2.connect(url.origin, { lookup: publicLookup });
     const fail = (error: Error) => {
       clearTimeout(timer);
       session.destroy();

@@ -3,7 +3,8 @@ import { POST } from "./route";
 
 const dohMocks = vi.hoisted(() => ({ resolveA: vi.fn(), traceCountry: vi.fn() }));
 
-vi.mock("@/lib/dns/doh", () => dohMocks);
+// The address filter stays real so the route test covers which IPs are contacted.
+vi.mock("@/lib/dns/doh", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/dns/doh")>()), ...dohMocks }));
 
 function checkRequest(body: unknown) {
   return new Request("http://localhost/api/donors/check", {
@@ -19,11 +20,25 @@ describe("POST /api/donors/check", () => {
     dohMocks.traceCountry.mockReset();
   });
 
-  it("rejects donors that are not presets", async () => {
-    const response = await POST(checkRequest({ donor: "https://169.254.169.254/dns-query" }));
+  it.each(["http://dns.example/dns-query", "https://user:pass@dns.example/dns-query", "not a url", `https://dns.example/${"a".repeat(2048)}`])(
+    "rejects %s",
+    async (donor) => {
+      const response = await POST(checkRequest({ donor }));
 
-    expect(response.status).toBe(400);
-    expect(dohMocks.resolveA).not.toHaveBeenCalled();
+      expect(response.status).toBe(400);
+      expect(dohMocks.resolveA).not.toHaveBeenCalled();
+    }
+  );
+
+  it("checks a custom HTTPS DoH URL and never contacts internal addresses it returns", async () => {
+    dohMocks.resolveA.mockResolvedValue(["10.0.0.5", "169.254.169.254", "203.0.113.9"]);
+    dohMocks.traceCountry.mockResolvedValue({ country: "NL", ms: 70 });
+
+    const response = await POST(checkRequest({ donor: "https://dns.example/dns-query" }));
+
+    expect(await response.json()).toEqual({ dnsMs: expect.any(Number), chatgptMs: 70, country: "NL" });
+    expect(dohMocks.traceCountry).toHaveBeenCalledTimes(1);
+    expect(dohMocks.traceCountry).toHaveBeenCalledWith("203.0.113.9", "chatgpt.com", 5000);
   });
 
   it("passes with the exit country and timing of the first usable address", async () => {
@@ -82,5 +97,16 @@ describe("POST /api/donors/check", () => {
 
     await POST(checkRequest(donor));
     expect(dohMocks.resolveA).toHaveBeenCalledTimes(2);
+  });
+
+  // Runs last: the checks it leaves hanging stay in flight for the rest of this file.
+  it("refuses new checks while too many are running", async () => {
+    dohMocks.resolveA.mockReturnValue(new Promise(() => {}));
+    for (let i = 0; i < 50; i++) void POST(checkRequest({ donor: `https://dns${i}.example/dns-query` }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const response = await POST(checkRequest({ donor: "https://one-more.example/dns-query" }));
+
+    expect(response.status).toBe(429);
   });
 });
