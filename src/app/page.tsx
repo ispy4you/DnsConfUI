@@ -2,6 +2,7 @@
 
 import { ChevronDown, Globe, Layers, MapPin, RefreshCw, ShieldCheck, GitFork, Play, Zap, Sun, Moon } from "lucide-react";
 import { DeviceAuthPanel } from "@/components/device-auth-panel";
+import { DnsMonitor } from "@/components/dns-monitor";
 import { SetupWizard } from "@/components/setup-wizard";
 import { useAuth } from "@/components/auth-provider";
 import { useLocale } from "@/lib/i18n/context";
@@ -138,10 +139,11 @@ export default function Home() {
           </div>
         </div>
 
-        <div>
+        <div className="flex flex-col gap-6">
           <div className="w-full rounded-lg border border-line bg-white p-4 shadow-soft md:p-6">
             {token ? <SetupWizard /> : <DeviceAuthPanel />}
           </div>
+          {token ? null : <DnsMonitor />}
         </div>
       </section>
     </main>

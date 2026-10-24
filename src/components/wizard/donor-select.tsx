@@ -1,38 +1,17 @@
 "use client";
 
-import { Check, CheckCircle2, ChevronDown, Loader2, XCircle } from "lucide-react";
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { Check, ChevronDown } from "lucide-react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { DNS_DONORS, isDnsDonorPreset } from "@/domain/dns-donors";
-import { checkDonor, type DonorCheck } from "@/lib/dns/donor-check";
 import { useLocale } from "@/lib/i18n/context";
 import { cn } from "@/components/ui";
 import { Tooltip } from "@/components/ui/tooltip";
+import { ChatgptCheck, DnsCheck, StatusIcon, useDonorChecks } from "./donor-checks";
 
-type Status = "checking" | "ok" | "fail";
-
-// Selected mark, donor name, DNS check, chatgpt.com check (right-aligned).
-const ROW_GRID = "grid grid-cols-[0.875rem_minmax(0,1fr)_4.5rem_5.5rem] items-center gap-1.5";
-
-function toStatus(ms: number | null | undefined): Status {
-  return ms === undefined ? "checking" : ms === null ? "fail" : "ok";
-}
-
-function StatusIcon({ status, label }: { status: Status; label: string }) {
-  const Icon = status === "checking" ? Loader2 : status === "ok" ? CheckCircle2 : XCircle;
-  return (
-    <span title={label} className="inline-flex shrink-0">
-      <Icon
-        aria-hidden="true"
-        className={cn(
-          "size-3.5",
-          status === "checking" && "animate-spin text-ink/40",
-          status === "ok" && "text-moss",
-          status === "fail" && "text-coral"
-        )}
-      />
-    </span>
-  );
-}
+// Selected mark, donor name, DNS check, chatgpt.com check.
+const ROW_GRID = "grid grid-cols-[0.875rem_minmax(0,1fr)_4.5rem_6rem] items-center gap-1.5";
+// Vertical line between the DNS and chatgpt.com columns, stretched over the row padding so it stays continuous.
+const DIVIDER = "-my-1.5 self-stretch border-l border-line py-1.5 pl-2";
 
 export function DonorSelect({
   value,
@@ -46,26 +25,13 @@ export function DonorSelect({
   const { t } = useLocale();
   const id = useId();
   const rootRef = useRef<HTMLDivElement>(null);
-  const run = useRef(0);
+  const listRef = useRef<HTMLUListElement>(null);
+  const [scrollbarWidth, setScrollbarWidth] = useState(0);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
-  const [checks, setChecks] = useState<Record<string, DonorCheck>>({});
+  const { runChecks, statusOf } = useDonorChecks();
 
-  function runChecks() {
-    // Results of an earlier run that arrive late are dropped.
-    const current = ++run.current;
-    setChecks({});
-    DNS_DONORS.forEach((donor) => {
-      checkDonor(donor.value).then((result) => {
-        if (run.current === current) setChecks((prev) => ({ ...prev, [donor.value]: result }));
-      });
-    });
-  }
-
-  useEffect(() => {
-    runChecks();
-    return () => { run.current++; };
-  }, []);
+  useEffect(() => runChecks(), [runChecks]);
 
   useEffect(() => {
     if (!open) return;
@@ -83,31 +49,14 @@ export function DonorSelect({
   const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value));
   const optionId = (index: number) => `${id}-option-${index}`;
 
+  // The header sits outside the scrolling list, so it is padded by the scrollbar width to keep the columns aligned.
+  useLayoutEffect(() => {
+    if (open && listRef.current) setScrollbarWidth(listRef.current.offsetWidth - listRef.current.clientWidth);
+  }, [open]);
+
   useEffect(() => {
     if (open) document.getElementById(optionId(active))?.scrollIntoView?.({ block: "nearest" });
   }, [open, active]);
-
-  function statusOf(donor: string) {
-    const check = checks[donor];
-    const dns = toStatus(check?.dnsMs);
-    const chatgpt = toStatus(check?.chatgptMs);
-    const dnsKey = { checking: "profiles.donorCheckDnsChecking", ok: "profiles.donorCheckDnsOk", fail: "profiles.donorCheckDnsFail" } as const;
-    const country = check?.country ?? null;
-    const chatgptKey = {
-      checking: "profiles.donorCheckChatgptChecking",
-      ok: "profiles.donorCheckChatgptOk",
-      fail: country ? "profiles.donorCheckChatgptBlocked" : "profiles.donorCheckChatgptFail"
-    } as const;
-    return {
-      dns,
-      chatgpt,
-      country,
-      dnsMs: check?.dnsMs ?? null,
-      chatgptMs: check?.chatgptMs ?? null,
-      dnsText: t(dnsKey[dns], { ms: check?.dnsMs ?? 0 }),
-      chatgptText: t(chatgptKey[chatgpt], { ms: check?.chatgptMs ?? 0, country: country ?? "" })
-    };
-  }
 
   function openList() {
     setActive(selectedIndex);
@@ -168,17 +117,17 @@ export function DonorSelect({
         <ChevronDown aria-hidden="true" className={cn("size-3.5 shrink-0 text-ink/50 transition", open && "rotate-180")} />
       </button>
       {open ? (
-        <div className="absolute right-0 top-full z-20 mt-1 w-[21rem] max-w-[calc(100vw-2rem)] rounded-md border border-line bg-white text-xs text-ink shadow-soft">
-          <div className={cn(ROW_GRID, "border-b border-line px-2 py-1.5 text-[11px] text-ink/50")}>
+        <div className="absolute right-0 top-full z-20 mt-1 w-[22rem] max-w-[calc(100vw-2rem)] rounded-md border border-line bg-white text-xs text-ink shadow-soft">
+          <div className={cn(ROW_GRID, "border-b border-line py-1.5 pl-2 text-[11px] text-ink/50")} style={{ paddingRight: `calc(0.5rem + ${scrollbarWidth}px)` }}>
             <span />
             <span className="flex items-center gap-1">
               {t("profiles.donorCheckHeader")}
               <Tooltip text={t("profiles.donorCheckTooltip")} className="size-3" />
             </span>
-            <span aria-hidden="true">DNS</span>
-            <span aria-hidden="true" className="text-right">chatgpt.com</span>
+            <span className="flex items-center gap-1">DNS<Tooltip text={t("profiles.donorCheckDnsHint")} className="size-3" /></span>
+            <span className={cn(DIVIDER, "flex items-center gap-1")}>chatgpt.com<Tooltip text={t("profiles.donorCheckChatgptHint")} className="size-3" align="end" /></span>
           </div>
-          <ul id={`${id}-listbox`} role="listbox" aria-label={label} className="max-h-72 overflow-y-auto py-1">
+          <ul ref={listRef} id={`${id}-listbox`} role="listbox" aria-label={label} className="max-h-72 overflow-y-auto rounded-b-md">
             {options.map((option, index) => {
               const status = option.preset ? statusOf(option.value) : null;
               const isSelected = option.value === value;
@@ -204,21 +153,8 @@ export function DonorSelect({
                   <span className="truncate">{option.label}</span>
                   {status ? (
                     <>
-                      <span className="flex items-center gap-1">
-                        <StatusIcon status={status.dns} label={status.dnsText} />
-                        {status.dnsMs !== null ? (
-                          <span aria-hidden="true" className="text-[11px] font-normal tabular-nums text-ink/50">{t("profiles.donorCheckMs", { ms: status.dnsMs })}</span>
-                        ) : null}
-                      </span>
-                      <span className="flex items-center justify-end gap-1">
-                        {status.country ? (
-                          <span aria-hidden="true" className={cn("text-[11px] font-medium", status.chatgpt === "fail" ? "text-coral" : "text-ink/60")}>{status.country}</span>
-                        ) : null}
-                        {status.chatgptMs !== null ? (
-                          <span aria-hidden="true" className="text-[11px] font-normal tabular-nums text-ink/50">{t("profiles.donorCheckMs", { ms: status.chatgptMs })}</span>
-                        ) : null}
-                        <StatusIcon status={status.chatgpt} label={status.chatgptText} />
-                      </span>
+                      <DnsCheck status={status} />
+                      <ChatgptCheck status={status} className={DIVIDER} />
                     </>
                   ) : null}
                 </li>
