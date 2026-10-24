@@ -9,6 +9,8 @@ const apiMocks = vi.hoisted(() => ({ validateCredentials: vi.fn() }));
 
 vi.mock("@/lib/nextdns/api", () => ({ validateCredentials: apiMocks.validateCredentials }));
 
+vi.mock("@/lib/dns/donor-check", () => ({ checkDonor: () => new Promise(() => {}) }));
+
 const profile = {
   clientId: "",
   authSecret: "",
@@ -76,7 +78,7 @@ describe("ProfilesSection", () => {
 
     expect(screen.getByRole("checkbox", { name: "DNS-донор" })).toBeChecked();
     expect(screen.getByText("DNS-донор", { selector: "label" })).toHaveClass("whitespace-nowrap");
-    expect(screen.getByRole("combobox", { name: "DNS-донор" })).toHaveValue(DEFAULT_DNS_DONOR);
+    expect(screen.getByRole("combobox", { name: "DNS-донор" })).toHaveAttribute("title", DEFAULT_DNS_DONOR);
     expect(screen.getByRole("combobox", { name: "DNS-донор" })).toHaveAttribute("title", DEFAULT_DNS_DONOR);
   });
 
@@ -94,9 +96,8 @@ describe("ProfilesSection", () => {
   it("selects another donor preset", () => {
     const { setValue } = renderSection();
 
-    fireEvent.change(screen.getByRole("combobox", { name: "DNS-донор" }), {
-      target: { value: "https://eu.geohide.ru/dns-query" },
-    });
+    fireEvent.click(screen.getByRole("combobox", { name: "DNS-донор" }));
+    fireEvent.click(screen.getByRole("option", { name: /^GeoHide EU./ }));
 
     expect(setValue).toHaveBeenCalledWith(
       "profiles",
@@ -165,14 +166,14 @@ describe("ProfilesSection", () => {
       retainCredentials: true
     });
 
-    expect(screen.getByRole("combobox", { name: "DNS-донор" })).toHaveValue("https://eu.geohide.ru/dns-query");
+    expect(screen.getByRole("combobox", { name: "DNS-донор" })).toHaveAttribute("title", "https://eu.geohide.ru/dns-query");
 
     fireEvent.change(screen.getByRole("combobox", { name: "Выбрать профиль" }), { target: { value: "1" } });
-    expect(screen.getByRole("combobox", { name: "DNS-донор" })).toHaveValue("https://dns.comss.one/dns-query");
+    expect(screen.getByRole("combobox", { name: "DNS-донор" })).toHaveAttribute("title", "https://dns.comss.one/dns-query");
 
     fireEvent.change(screen.getByRole("combobox", { name: "Выбрать профиль" }), { target: { value: "2" } });
     expect(screen.getByRole("combobox", { name: "DNS-донор" }))
-      .toHaveDisplayValue("Свой адрес: https://custom.test/dns-query");
+      .toHaveTextContent("Свой адрес: https://custom.test/dns-query");
 
     fireEvent.change(screen.getByRole("combobox", { name: "Выбрать профиль" }), { target: { value: "3" } });
     expect(screen.getByRole("checkbox", { name: "DNS-донор" })).not.toBeChecked();
@@ -187,9 +188,9 @@ describe("ProfilesSection", () => {
     expect(screen.queryByRole("combobox", { name: "DNS-донор" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("checkbox", { name: "DNS-донор" }));
-    expect(screen.getByRole("combobox", { name: "DNS-донор" })).toHaveValue(customDonor);
+    expect(screen.getByRole("combobox", { name: "DNS-донор" })).toHaveAttribute("title", customDonor);
     expect(screen.getByRole("combobox", { name: "DNS-донор" }))
-      .toHaveDisplayValue(`Свой адрес: ${customDonor}`);
+      .toHaveTextContent(`Свой адрес: ${customDonor}`);
   });
 
   it("validates complete credentials after the debounce delay", async () => {
