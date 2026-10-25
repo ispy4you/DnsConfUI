@@ -17,7 +17,8 @@ function checkRequest(body: unknown) {
 describe("POST /api/donors/check", () => {
   beforeEach(() => {
     dohMocks.resolveA.mockReset();
-    dohMocks.traceCountry.mockReset();
+    // Every check also looks up the server exit IP unless an earlier one cached it.
+    dohMocks.traceCountry.mockReset().mockResolvedValue(null);
   });
 
   it.each(["http://dns.example/dns-query", "https://user:pass@dns.example/dns-query", "not a url", `https://dns.example/${"a".repeat(2048)}`])(
@@ -85,7 +86,7 @@ describe("POST /api/donors/check", () => {
     const response = await POST(checkRequest({ donor: "https://dns.dagami.ru/dns-query" }));
 
     expect(await response.json()).toEqual({ dnsMs: null, chatgptMs: null, country: null, direct: false, ips: [] });
-    expect(dohMocks.traceCountry).not.toHaveBeenCalled();
+    expect(dohMocks.traceCountry).not.toHaveBeenCalledWith(expect.anything(), "chatgpt.com", expect.anything());
   });
 
   it("shares one check between concurrent requests but runs a fresh one afterwards", async () => {
@@ -97,6 +98,18 @@ describe("POST /api/donors/check", () => {
 
     await POST(checkRequest(donor));
     expect(dohMocks.resolveA).toHaveBeenCalledTimes(2);
+  });
+
+  it("looks up the server exit IP again after a failed lookup", async () => {
+    dohMocks.resolveA.mockResolvedValue(["104.18.32.47"]);
+    const exit = { country: "RU", ip: "198.51.100.7", ms: 40 };
+    dohMocks.traceCountry.mockImplementation(async (ip: string) => (ip === "1.1.1.1" ? null : exit));
+    await POST(checkRequest({ donor: "https://dns.example/dns-query" }));
+
+    dohMocks.traceCountry.mockResolvedValue(exit);
+    const response = await POST(checkRequest({ donor: "https://dns.example/dns-query" }));
+
+    expect(await response.json()).toMatchObject({ chatgptMs: 40, country: null, direct: true });
   });
 
   it("marks a DNS without a proxy as direct and leaves the country to the browser", async () => {
