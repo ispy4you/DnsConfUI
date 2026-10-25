@@ -42,7 +42,11 @@ function serverExitIp(): Promise<string | null> {
   if (!exitIp || exitIp.expires <= Date.now()) {
     exitIp = {
       expires: Date.now() + EXIT_IP_TTL_MS,
-      ip: traceCountry("1.1.1.1", "one.one.one.one", TIMEOUT_MS).then((trace) => trace?.ip ?? null)
+      ip: traceCountry("1.1.1.1", "one.one.one.one", TIMEOUT_MS).then((trace) => {
+        // A failed lookup is not kept: without the IP every DNS without a proxy would pass with this server's country.
+        if (!trace?.ip) exitIp = null;
+        return trace?.ip ?? null;
+      })
     };
   }
   return exitIp.ip;
