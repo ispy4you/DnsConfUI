@@ -30,26 +30,22 @@ function timeAgo(unixSeconds: number, locale: string): string {
 
 function LocalCheck({ result, dnsFailed }: { result: LocalResult | undefined; dnsFailed: boolean }) {
   const { t } = useLocale();
-  // A DNS that gave the server no address has nothing to test from the user's computer, which is a failure too.
-  if (result === undefined && dnsFailed) {
-    return <span className="flex items-center"><span className="sr-only">{t("monitor.local.noAddress")}</span><StatusIcon status="fail" label={t("monitor.local.noAddress")} /></span>;
-  }
-  if (result === undefined) {
+  if (result === undefined && !dnsFailed) {
     return <span title={t("monitor.local.none")} className="text-ink/30"><span className="sr-only">{t("monitor.local.none")}</span><span aria-hidden="true">—</span></span>;
   }
-  const blocked = result !== null && BLOCKED_COUNTRIES.has(result.country);
-  const text = result === null
-    ? t("monitor.local.fail")
-    : t(blocked ? "monitor.local.blocked" : "monitor.local.ok", { country: result.country, ms: result.ms });
+  const blocked = !!result && BLOCKED_COUNTRIES.has(result.country);
+  // A DNS that gave the server no address has nothing to test from the user's computer, which is a failure too.
+  const text = result === undefined
+    ? t("monitor.local.noAddress")
+    : result === null
+      ? t("monitor.local.fail")
+      : t(blocked ? "monitor.local.blocked" : "monitor.local.ok", { country: result.country, ms: result.ms });
   return (
     <span className="flex items-center gap-1">
       <span className="sr-only">{text}</span>
-      {result ? (
-        <>
-          <span aria-hidden="true" className={cn("w-5 text-center text-[11px] font-medium", blocked ? "text-coral" : "text-ink/60")}>{result.country}</span>
-          <span aria-hidden="true" className="min-w-[2.75rem] text-right text-[11px] tabular-nums text-ink/50">{t("profiles.donorCheckMs", { ms: result.ms })}</span>
-        </>
-      ) : null}
+      {/* The slots stay even when empty, so the icon keeps its place at the right like in the ChatGPT column. */}
+      <span aria-hidden="true" className={cn("w-5 text-center text-[11px] font-medium", blocked ? "text-coral" : "text-ink/60")}>{result?.country}</span>
+      <span aria-hidden="true" className="min-w-[2.75rem] text-right text-[11px] tabular-nums text-ink/50">{result ? t("profiles.donorCheckMs", { ms: result.ms }) : null}</span>
       <StatusIcon status={result && !blocked ? "ok" : "fail"} label={text} />
     </span>
   );

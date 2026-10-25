@@ -109,8 +109,9 @@ export function DnsCheck({ status }: { status: DonorStatus }) {
   return (
     <span className="flex items-center gap-1">
       <span className="sr-only">{status.dnsText}</span>
+      {/* Time first, then status, with a fixed time slot, as in the other columns. */}
+      <Detail className="min-w-[2.75rem] text-right">{status.dnsMs !== null ? t("profiles.donorCheckMs", { ms: status.dnsMs }) : null}</Detail>
       <StatusIcon status={status.dns} label={status.dnsText} />
-      {status.dnsMs !== null ? <Detail>{t("profiles.donorCheckMs", { ms: status.dnsMs })}</Detail> : null}
     </span>
   );
 }
