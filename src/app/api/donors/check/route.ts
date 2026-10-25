@@ -94,7 +94,8 @@ export async function POST(request: Request) {
   const { donor } = parsed.data;
   let result = inFlight.get(donor);
   if (!result) {
-    if (inFlight.size >= MAX_IN_FLIGHT) {
+    // Presets are few and shared, so slow custom URLs cannot crowd them out.
+    if (!isDnsDonorPreset(donor) && inFlight.size >= MAX_IN_FLIGHT) {
       return NextResponse.json({ error: "Too many checks at once. Try again shortly." }, { status: 429 });
     }
     result = check(donor).finally(() => inFlight.delete(donor));

@@ -108,30 +108,6 @@ function isValidIpv4(value: string): boolean {
   });
 }
 
-export function getWizardStepValidity(step: number, config: Partial<DnsConfConfig>): boolean {
-  switch (step) {
-    case 1:
-      return (config.profiles ?? []).some(p => dnsProviderSchema.safeParse(p.provider).success);
-    case 2:
-      return (config.profiles ?? []).length > 0 && (config.profiles ?? []).every(p => p.clientId?.trim() && p.authSecret?.trim());
-    case 3:
-      return z.array(z.string().trim().url()).safeParse(config.blocklists ?? []).success;
-    case 4:
-      return z
-        .object({
-          redirects: z.array(z.string().trim().url()),
-          redirectExclusions: z.array(z.string().trim().min(1))
-        })
-        .partial()
-        .safeParse(config).success;
-    case 5:
-    case 6:
-      return dnsConfConfigSchema.safeParse(config).success;
-    default:
-      return false;
-  }
-}
-
 export const dnsConfWorkflow = {
   sourceOwner: "noVibe",
   sourceRepo: "DnsConf",

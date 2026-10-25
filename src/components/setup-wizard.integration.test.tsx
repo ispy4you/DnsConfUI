@@ -120,6 +120,29 @@ describe("SetupWizard retained navigation", () => {
     expect(customSource).toHaveValue(customRedirect);
   });
 
+  it("selects the hosts lists again when geo-blocking is enabled with none left", async () => {
+    render(
+      <LocaleProvider>
+        <SetupWizard />
+      </LocaleProvider>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /Сохранить учётные данные/ }));
+
+    const geoBlock = screen.getByRole("checkbox", { name: "Обход гео-блокировок" });
+    const geoHide = screen.getByRole("checkbox", { name: "GeoHide" });
+    const malw = screen.getByRole("checkbox", { name: "Malw" });
+
+    fireEvent.click(geoHide);
+    expect(geoBlock).not.toBeChecked();
+    expect(malw).not.toBeChecked();
+
+    fireEvent.click(geoBlock);
+    expect(geoBlock).toBeChecked();
+    expect(geoHide).toBeChecked();
+    expect(malw).toBeChecked();
+  });
+
   it("shows the DNS donor as disabled when DONOR_DNS is absent", async () => {
     mocks.loadExistingDnsConfSetup.mockResolvedValueOnce({
       repository: { owner: "alice", repo: "DnsConf" },

@@ -11,17 +11,18 @@ Configure DNS blocklists and redirects for Cloudflare / NextDNS — without touc
    creates workflow variables, and dispatches the first run
 
 All GitHub API calls are made directly from the browser using your ephemeral OAuth token.
-The application has no backend, no database, and never sees your provider secrets.
+Provider credentials pass through this app's own API routes only to be checked with Cloudflare / NextDNS
+(and, in quick mode, to configure the NextDNS profile). The app has no database and never stores them.
 
 ## Why is it secure
 
 | Concern | How it's handled |
 |---|---|
 | GitHub token | Exists only in browser memory — destroyed on tab close or refresh |
-| Provider secrets (`AUTH_SECRET`, `CLIENT_ID`) | Encrypted in the browser with libsodium before reaching the network |
+| Provider secrets (`AUTH_SECRET`, `CLIENT_ID`) | Encrypted in the browser with libsodium before they are sent to GitHub Actions Secrets. The credential check and quick-mode NextDNS setup send them through this app's server to the provider, which is the only place they go |
 | Credential storage | The app stores nothing — no database, no sessions, no cookies |
-| XSS | Strict CSP headers, no `dangerouslySetInnerHTML`, minimal third-party scripts |
-| API routes | Device Flow code/token exchange uses same-origin Next.js route handlers — no CORS exposure |
+| XSS | CSP headers without JavaScript `eval` in production (only WebAssembly is allowed, for libsodium), no third-party scripts, a single static inline script that applies the theme |
+| API routes | Device Flow code/token exchange, credential checks, NextDNS setup and DNS donor checks use same-origin Next.js route handlers — no CORS exposure |
 
 ## Multi-profile support
 

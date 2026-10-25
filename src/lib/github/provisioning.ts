@@ -408,16 +408,18 @@ async function syncVariable(
   environment: string
 ) {
   if (value === "") {
-    try {
-      await request("DELETE /repos/{owner}/{repo}/environments/{environment_name}/variables/{name}", {
-        owner,
-        repo,
-        environment_name: environment,
-        name
+    const deleteIfExists = (route: string, parameters: Record<string, unknown>) =>
+      request(route, parameters).catch((error) => {
+        if (!isNotFoundError(error)) throw error;
       });
-    } catch (error) {
-      if (!isNotFoundError(error)) throw error;
-    }
+    await deleteIfExists("DELETE /repos/{owner}/{repo}/environments/{environment_name}/variables/{name}", {
+      owner,
+      repo,
+      environment_name: environment,
+      name
+    });
+    // Older versions wrote repository variables, which the workflow falls back to once the environment one is gone.
+    await deleteIfExists("DELETE /repos/{owner}/{repo}/actions/variables/{name}", { owner, repo, name });
     return;
   }
 
@@ -511,14 +513,15 @@ async function waitForWorkflowRunCompletion(
         throw new Error(`Workflow run finished with conclusion: ${data.conclusion}`);
       }
     } catch (error) {
-      // re-throw if it's a provisioning error, retry on network issues
-      if (error instanceof Error && error.message.startsWith("Workflow run")) {
+      // re-throw a finished run and a token GitHub no longer accepts, retry on network issues
+      const status = errorStatus(error);
+      if ((error instanceof Error && error.message.startsWith("Workflow run")) || status === 401 || status === 403) {
         throw error;
       }
     }
     await sleep(WORKFLOW_COMPLETION_INTERVAL_MS);
   }
-  // Timeout — still mark as done (the workflow might still be running)
+  throw new Error("Workflow run is still in progress. Check its result on GitHub.");
 }
 
 async function enableActionsIfDisabled(request: GitHubRequest, owner: string, repo: string): Promise<void> {
@@ -542,24 +545,19 @@ export async function starRepository(
   await request("PUT /user/starred/{owner}/{repo}", { owner, repo });
 }
 
-function isAlreadyExistsError(error: unknown): boolean {
-  if (typeof error !== "object" || error === null) {
-    return false;
-  }
+function errorStatus(error: unknown): number | undefined {
+  if (typeof error !== "object" || error === null) return undefined;
+  const candidate = error as { status?: number; response?: { status?: number } };
+  return candidate.status ?? candidate.response?.status;
+}
 
-  const candidate = error as {
-    status?: number;
-    response?: { status?: number };
-    message?: string;
-  };
-  const status = candidate.status ?? candidate.response?.status;
-  const message = candidate.message?.toLowerCase() ?? "";
+function isAlreadyExistsError(error: unknown): boolean {
+  const status = errorStatus(error);
+  const message = (error as { message?: string } | null)?.message?.toLowerCase() ?? "";
 
   return status === 409 || (status === 422 && message.includes("already"));
 }
 
 function isNotFoundError(error: unknown): boolean {
-  if (typeof error !== "object" || error === null) return false;
-  const candidate = error as { status?: number; response?: { status?: number } };
-  return (candidate.status ?? candidate.response?.status) === 404;
+  return errorStatus(error) === 404;
 }

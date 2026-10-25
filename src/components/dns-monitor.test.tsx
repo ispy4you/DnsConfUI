@@ -159,13 +159,17 @@ describe("DnsMonitor", () => {
     expect(checkDonor).toHaveBeenLastCalledWith("https://dns.example/dns-query");
   });
 
-  it("rechecks a preset in place instead of adding it twice", () => {
+  it("rechecks a preset in place instead of adding it twice", async () => {
     renderMonitor();
+    // A preset that is still being checked is not checked again, so the first round has to finish.
+    await screen.findAllByText("DNS: отвечает, 90 мс");
+    checkDonor.mockClear();
 
     fireEvent.change(screen.getByRole("textbox", { name: "Проверить свой DoH" }), { target: { value: DNS_DONORS[0].value } });
     fireEvent.click(screen.getByRole("button", { name: "Проверить" }));
 
     expect(screen.getAllByRole("row")).toHaveLength(DNS_DONORS.length + 1);
+    expect(checkDonor).toHaveBeenCalledTimes(1);
     expect(checkDonor).toHaveBeenLastCalledWith(DNS_DONORS[0].value);
   });
 });

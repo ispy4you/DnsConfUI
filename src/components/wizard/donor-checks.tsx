@@ -18,22 +18,25 @@ const PRESETS = DNS_DONORS.map((donor) => donor.value);
 /** Runs availability checks: `check` for the given DoH URLs, `runChecks` for every preset (plus `extra`). */
 export function useDonorChecks() {
   const { t } = useLocale();
-  const counter = useRef(0);
-  const latest = useRef<Record<string, number>>({});
+  const pending = useRef(new Map<string, Promise<DonorCheck>>());
   const [checks, setChecks] = useState<Record<string, DonorCheck>>({});
 
   const check = useCallback((donors: string[]) => {
+    // A donor that is still being checked is left alone: its result is on the way.
+    const fresh = donors.filter((donor) => !pending.current.has(donor));
     setChecks((prev) => {
       const next = { ...prev };
-      donors.forEach((donor) => delete next[donor]);
+      fresh.forEach((donor) => delete next[donor]);
       return next;
     });
-    donors.forEach((donor) => {
-      // A late result from an earlier check of the same donor is dropped.
-      const id = ++counter.current;
-      latest.current[donor] = id;
-      checkDonor(donor).then((result) => {
-        if (latest.current[donor] === id) setChecks((prev) => ({ ...prev, [donor]: result }));
+    fresh.forEach((donor) => {
+      const request = checkDonor(donor);
+      pending.current.set(donor, request);
+      request.then((result) => {
+        // A result of a check dropped on unmount is ignored.
+        if (pending.current.get(donor) !== request) return;
+        pending.current.delete(donor);
+        setChecks((prev) => ({ ...prev, [donor]: result }));
       });
     });
   }, []);
@@ -47,7 +50,7 @@ export function useDonorChecks() {
     visitorCountry().then((country) => { if (mounted) setVisitor(country); });
     return () => {
       mounted = false;
-      latest.current = {};
+      pending.current.clear();
     };
   }, []);
 

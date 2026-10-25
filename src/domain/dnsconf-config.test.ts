@@ -2,8 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildDnsConfPayload,
   defaultDnsConfConfig,
-  dnsConfConfigSchema,
-  getWizardStepValidity
+  dnsConfConfigSchema
 } from "./dnsconf-config";
 import { DEFAULT_DNS_DONOR } from "./dns-donors";
 
@@ -250,36 +249,5 @@ describe("buildDnsConfPayload", () => {
     expect(payload.secrets).toEqual({});
     expect(payload.variables.DNS).toBe("nextdns,cloudflare");
     expect(payload.variables.DONOR_DNS).toBe(`-,${DEFAULT_DNS_DONOR}`);
-  });
-});
-
-describe("getWizardStepValidity", () => {
-  it("reports which wizard steps can advance", () => {
-    expect(getWizardStepValidity(1, validConfig)).toBe(true);
-    expect(getWizardStepValidity(1, { profiles: [{ clientId: "id", authSecret: "secret", provider: "", donorDns: DEFAULT_DNS_DONOR }] })).toBe(false);
-    expect(getWizardStepValidity(2, { ...validConfig, profiles: [{ clientId: "id", authSecret: "", provider: "cloudflare", donorDns: DEFAULT_DNS_DONOR }] })).toBe(false);
-    expect(getWizardStepValidity(3, { ...validConfig, blocklists: [] })).toBe(true);
-  });
-
-  it("validates redirect inputs on step 4", () => {
-    expect(getWizardStepValidity(4, {
-      redirects: ["https://example.com/hosts"],
-      redirectExclusions: ["keep.example"]
-    })).toBe(true);
-    expect(getWizardStepValidity(4, {
-      redirects: ["not-a-url"],
-      redirectExclusions: ["keep.example"]
-    })).toBe(false);
-  });
-
-  it("requires the complete schema on review and provisioning steps", () => {
-    expect(getWizardStepValidity(5, validConfig)).toBe(true);
-    expect(getWizardStepValidity(6, validConfig)).toBe(true);
-    expect(getWizardStepValidity(5, { ...validConfig, profiles: [] })).toBe(false);
-  });
-
-  it("rejects unknown steps", () => {
-    expect(getWizardStepValidity(0, validConfig)).toBe(false);
-    expect(getWizardStepValidity(7, validConfig)).toBe(false);
   });
 });

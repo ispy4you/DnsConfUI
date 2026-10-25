@@ -62,7 +62,7 @@ export const locale = {
   "points.fork.title": "Full control",
   "points.fork.text": "A personal DnsConf fork in your GitHub account. GitHub Actions keeps the rules up to date.",
   "points.nocred.title": "No stored credentials",
-  "points.nocred.text": "Provider secrets are encrypted in the browser and sent directly to GitHub Actions Secrets.",
+  "points.nocred.text": "Provider secrets are encrypted in the browser before they go to GitHub Actions Secrets. To check them, they pass through this site's server to the provider and are never stored.",
   "points.run.title": "Set and forget",
   "points.run.text": "GitHub Actions updates geo-blocking, ad, and tracker rules every night.",
 

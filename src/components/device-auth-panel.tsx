@@ -35,6 +35,8 @@ export function DeviceAuthPanel() {
       return;
     }
 
+    // A restart replaces the device code, so the old one is no longer polled.
+    if (pollingRef.current) window.clearTimeout(pollingRef.current);
     setState("starting");
     setMessage("");
 

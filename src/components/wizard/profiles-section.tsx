@@ -3,17 +3,21 @@
 import { CheckCircle2, ChevronDown, Loader2, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { UseFormSetValue } from "react-hook-form";
-import type { DnsConfConfig } from "@/domain/dnsconf-config";
+import type { DnsConfConfig, Profile } from "@/domain/dnsconf-config";
 import { DEFAULT_DNS_DONOR } from "@/domain/dns-donors";
 import { validateCredentials } from "@/lib/nextdns/api";
 import { useLocale } from "@/lib/i18n/context";
 import { Field, inputClass } from "@/components/ui";
-import { CLOUDFLARE_CLIENT_ID_LENGTH, NEXTDNS_CLIENT_ID_LENGTH } from "@/lib/constants";
+import { detectProvider } from "@/lib/constants";
 import { translatedError } from "./utils";
 import { ScriptBehaviour } from "./script-behaviour";
 import { ToggleSwitch } from "./toggle-switch";
 import { DonorSelect } from "./donor-select";
 import { Tooltip } from "@/components/ui/tooltip";
+
+function credentialsKey(profile: Profile): string {
+  return JSON.stringify([profile.clientId, profile.authSecret]);
+}
 
 export function ProfilesSection({
   profiles,
@@ -38,9 +42,10 @@ export function ProfilesSection({
 }) {
   const { t } = useLocale();
   const [selected, setSelected] = useState(0);
-  const [credStatus, setCredStatus] = useState<Record<number, { status: "idle" | "validating" | "valid" | "invalid"; message?: string }>>({});
+  // Keyed by the credentials, not the profile position: removing a profile cannot hand its result to another one,
+  // and a late answer for credentials that were since changed does not touch the new ones.
+  const [credStatus, setCredStatus] = useState<Record<string, { status: "validating" | "valid" | "invalid"; message?: string }>>({});
   const validateTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
-  const validationVersions = useRef<Record<number, number>>({});
   const enabledDonors = useRef<Record<number, string>>(
     Object.fromEntries(profiles.flatMap((profile, index) => profile.donorDns ? [[index, profile.donorDns]] : [])),
   );
@@ -53,33 +58,36 @@ export function ProfilesSection({
   }, [profiles]);
 
   useEffect(() => {
-    const p = profiles[selected];
-    const detected = p?.clientId?.length === CLOUDFLARE_CLIENT_ID_LENGTH ? "cloudflare" : p?.clientId?.length === NEXTDNS_CLIENT_ID_LENGTH ? "nextdns" : null;
-    if (!detected || !p?.authSecret?.trim() || credStatus[selected]) return;
-    const version = (validationVersions.current[selected] ?? 0) + 1;
-    validationVersions.current[selected] = version;
-    const timer = setTimeout(async () => {
-      setCredStatus(prev => ({ ...prev, [selected]: { status: "validating" } }));
-      const result = await validateCredentials(p.clientId, p.authSecret, detected);
-      if (validationVersions.current[selected] !== version) return;
-      setCredStatus(prev => ({
-        ...prev,
-        [selected]: result.valid
-          ? { status: "valid" }
-          : { status: "invalid", message: result.error }
-      }));
-    }, 1000);
-    validateTimers.current[selected] = timer;
+    const profile = profiles[selected];
+    if (profile && !credStatus[credentialsKey(profile)]) validate(selected, profile);
   }, [selected, simplified]);
 
   useEffect(() => {
     if (!onValidChange) return;
-    const allValid = profiles.every((p, i) => {
+    const allValid = profiles.every((p) => {
       if (!p.clientId?.trim() || !p.authSecret?.trim()) return true;
-      return credStatus[i]?.status === "valid";
+      return credStatus[credentialsKey(p)]?.status === "valid";
     });
     onValidChange(allValid);
   }, [credStatus, profiles, onValidChange]);
+
+  function validate(index: number, profile: Profile) {
+    clearTimeout(validateTimers.current[index]);
+    const provider = detectProvider(profile.clientId ?? "");
+    if (!provider || !profile.authSecret?.trim()) return;
+
+    const key = credentialsKey(profile);
+    validateTimers.current[index] = setTimeout(async () => {
+      setCredStatus(prev => ({ ...prev, [key]: { status: "validating" } }));
+      const result = await validateCredentials(profile.clientId, profile.authSecret, provider);
+      setCredStatus(prev => ({
+        ...prev,
+        [key]: result.valid
+          ? { status: "valid" }
+          : { status: "invalid", message: result.error }
+      }));
+    }, 1000);
+  }
 
   function update(index: number, field: "clientId" | "authSecret" | "provider" | "donorDns", value: string) {
     const next = profiles.map((p, i) =>
@@ -87,39 +95,17 @@ export function ProfilesSection({
     ) as DnsConfConfig["profiles"];
     setValue("profiles", next, { shouldDirty: true, shouldValidate: true });
 
-    if (field !== "clientId" && field !== "authSecret") return;
-
-    const timer = validateTimers.current[index];
-    if (timer) clearTimeout(timer);
-    const version = (validationVersions.current[index] ?? 0) + 1;
-    validationVersions.current[index] = version;
-    setCredStatus(prev => {
-      const cleared = { ...prev };
-      delete cleared[index];
-      return cleared;
-    });
-
-    const p = next[index];
-    const len = p?.clientId?.length ?? 0;
-    const detected = len === CLOUDFLARE_CLIENT_ID_LENGTH ? "cloudflare" : len === NEXTDNS_CLIENT_ID_LENGTH ? "nextdns" : null;
-    if (!detected || !p?.authSecret?.trim()) return;
-
-    validateTimers.current[index] = setTimeout(async () => {
-      setCredStatus(prev => ({ ...prev, [index]: { status: "validating" } }));
-      const result = await validateCredentials(p.clientId, p.authSecret, detected);
-      if (validationVersions.current[index] !== version) return;
-      setCredStatus(prev => ({
-        ...prev,
-        [index]: result.valid
-          ? { status: "valid" }
-          : { status: "invalid", message: result.error }
-      }));
-    }, 1000);
+    if (field === "clientId" || field === "authSecret") validate(index, next[index]);
   }
 
   function remove(index: number) {
     const next = profiles.filter((_, i) => i !== index);
     setValue("profiles", next.length ? (next as DnsConfConfig["profiles"]) : [{ clientId: "", authSecret: "", provider: "", donorDns: DEFAULT_DNS_DONOR }], { shouldDirty: true, shouldValidate: true });
+    // Remembered donors follow their profiles to the new positions.
+    enabledDonors.current = Object.fromEntries(Object.entries(enabledDonors.current).flatMap(([key, donor]) => {
+      const position = Number(key);
+      return position === index ? [] : [[position > index ? position - 1 : position, donor]];
+    }));
     if (selected >= next.length) {
       setSelected(Math.max(0, next.length - 1));
     }
@@ -139,6 +125,8 @@ export function ProfilesSection({
 
     update(index, "donorDns", enabledDonors.current[index] ?? DEFAULT_DNS_DONOR);
   }
+
+  const selectedStatus = profiles[selected] ? credStatus[credentialsKey(profiles[selected])] : undefined;
 
   return (
     <section className="space-y-4 rounded-lg border border-line bg-paper p-4">
@@ -202,22 +190,21 @@ export function ProfilesSection({
               </Field>
             </>
           )}
-          {!retainCredentials && simplified && credStatus[selected] ? (
+          {!retainCredentials && simplified && selectedStatus ? (
             <div className="flex items-start gap-2 text-sm">
-              {credStatus[selected].status === "validating" ? (
+              {selectedStatus.status === "validating" ? (
                 <Loader2 className="mt-0.5 size-4 animate-spin text-moss shrink-0" aria-hidden="true" />
-              ) : credStatus[selected].status === "valid" ? (
+              ) : selectedStatus.status === "valid" ? (
                 <CheckCircle2 className="mt-0.5 size-4 text-moss shrink-0" aria-hidden="true" />
-              ) : credStatus[selected].status === "invalid" ? (
+              ) : (
                 <X className="mt-0.5 size-4 text-coral shrink-0" aria-hidden="true" />
-              ) : null}
+              )}
               <span className={
-                credStatus[selected].status === "invalid" ? "text-coral" : "text-moss"
+                selectedStatus.status === "invalid" ? "text-coral" : "text-moss"
               }>
-                {credStatus[selected].status === "validating" ? t('profiles.checking') :
-                 credStatus[selected].status === "valid" ? t('profiles.verified') :
-                 credStatus[selected].status === "invalid" ? credStatus[selected].message ?? t('profiles.invalid') :
-                 null}
+                {selectedStatus.status === "validating" ? t('profiles.checking') :
+                 selectedStatus.status === "valid" ? t('profiles.verified') :
+                 selectedStatus.message ?? t('profiles.invalid')}
               </span>
             </div>
           ) : null}

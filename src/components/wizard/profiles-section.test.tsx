@@ -51,6 +51,25 @@ function ControlledValidationSection() {
   );
 }
 
+function ControlledProfilesSection({ initial, onValidChange }: {
+  initial: React.ComponentProps<typeof ProfilesSection>["profiles"];
+  onValidChange: (valid: boolean) => void;
+}) {
+  const [profiles, setProfiles] = useState(initial);
+  const setValue = (_name: "profiles", value: typeof profiles) => setProfiles(value);
+
+  return (
+    <LocaleProvider>
+      <ProfilesSection
+        profiles={profiles}
+        setValue={setValue as React.ComponentProps<typeof ProfilesSection>["setValue"]}
+        simplified
+        onValidChange={onValidChange}
+      />
+    </LocaleProvider>
+  );
+}
+
 function ControlledDonorSection({ donorDns }: { donorDns: string }) {
   const [profiles, setProfiles] = useState([{ clientId: "", authSecret: "", provider: "nextdns" as const, donorDns }]);
   const setValue = (_name: "profiles", value: typeof profiles) => setProfiles(value);
@@ -209,6 +228,33 @@ describe("ProfilesSection", () => {
     expect(apiMocks.validateCredentials).toHaveBeenCalledWith("abc123", "secret", "nextdns");
     expect(screen.getByText("Учётные данные подтверждены")).toBeInTheDocument();
     expect(onValidChange).toHaveBeenLastCalledWith(true);
+  });
+
+  it("keeps each validation result with its profile after another profile is removed", async () => {
+    vi.useFakeTimers();
+    apiMocks.validateCredentials.mockImplementation(async (clientId: string) =>
+      clientId === "abc123" ? { valid: true } : { valid: false, error: "Wrong key" });
+    const onValidChange = vi.fn();
+
+    render(
+      <ControlledProfilesSection
+        initial={[
+          { clientId: "abc123", authSecret: "secret", provider: "nextdns", donorDns: DEFAULT_DNS_DONOR },
+          { clientId: "def456", authSecret: "secret", provider: "nextdns", donorDns: DEFAULT_DNS_DONOR }
+        ]}
+        onValidChange={onValidChange}
+      />
+    );
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    fireEvent.change(screen.getByRole("combobox", { name: "Выбрать профиль" }), { target: { value: "1" } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(screen.getByText("Wrong key")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Выбрать профиль" }), { target: { value: "0" } });
+    fireEvent.click(screen.getByRole("button", { name: "Удалить профиль" }));
+
+    expect(screen.getByText("Wrong key")).toBeInTheDocument();
+    expect(onValidChange).toHaveBeenLastCalledWith(false);
   });
 
   it("ignores a stale credential validation response", async () => {

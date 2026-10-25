@@ -24,11 +24,12 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      // libsodium compiles WebAssembly; full eval and WebSocket are needed only by the dev server (React debugging and hot reload).
+      `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'${isDev ? " 'unsafe-eval'" : ""}`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: https:",
       "font-src 'self'",
-      "connect-src 'self' https://github.com https://api.github.com https://1.1.1.1 ws:",
+      `connect-src 'self' https://github.com https://api.github.com https://1.1.1.1${isDev ? " ws:" : ""}`,
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self' https://github.com"
