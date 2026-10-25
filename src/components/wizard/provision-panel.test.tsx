@@ -59,6 +59,22 @@ describe("ProvisionPanel", () => {
     expect(screen.getByRole("button", { name: "Поставить звезду!" })).toBeVisible();
   });
 
+  it("links to the dispatched workflow run when configuration fails", () => {
+    renderPanel({
+      status: "error",
+      result: {
+        repository: { owner: "alice", repo: "DnsConf" },
+        workflowRunUrl: "https://github.com/alice/DnsConf/actions/runs/7",
+        workflowRunId: 7
+      }
+    });
+
+    expect(screen.getByRole("link", { name: "Открыть запуск workflow" })).toHaveAttribute(
+      "href",
+      "https://github.com/alice/DnsConf/actions/runs/7"
+    );
+  });
+
   it("keeps apply copy for a full configuration", () => {
     renderPanel();
 

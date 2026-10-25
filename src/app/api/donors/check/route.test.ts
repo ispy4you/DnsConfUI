@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { DNS_DONORS } from "@/domain/dns-donors";
 import { POST } from "./route";
 
 const dohMocks = vi.hoisted(() => ({ resolveA: vi.fn(), traceCountry: vi.fn() }));
@@ -136,5 +137,11 @@ describe("POST /api/donors/check", () => {
     const response = await POST(checkRequest({ donor: "https://one-more.example/dns-query" }));
 
     expect(response.status).toBe(429);
+
+    // Presets are still checked, so slow custom URLs cannot turn every listed donor red.
+    dohMocks.resolveA.mockRejectedValue(new Error("No answer."));
+    const preset = await POST(checkRequest({ donor: DNS_DONORS[0].value }));
+
+    expect(preset.status).toBe(200);
   });
 });

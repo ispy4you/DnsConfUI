@@ -64,7 +64,7 @@ export const locale: Record<LocaleKey, string> = {
   "points.fork.title": "Полный контроль",
   "points.fork.text": "Личный форк DnsConf в вашем аккаунте GitHub. Правила обновляются через GitHub Actions.",
   "points.nocred.title": "Никакого хранения данных",
-  "points.nocred.text": "Секреты провайдера шифруются в браузере и отправляются напрямую в GitHub Actions Secrets.",
+  "points.nocred.text": "Секреты провайдера шифруются в браузере перед отправкой в GitHub Actions Secrets. Для проверки они проходят через сервер этого сайта к провайдеру и нигде не сохраняются.",
   "points.run.title": "Настроил и забыл",
   "points.run.text": "GitHub Actions обновляет правила геоблокировки, рекламы и трекеров каждую ночь.",
 

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DNS_DONORS } from "@/domain/dns-donors";
 import { LocaleProvider } from "@/lib/i18n/context";
@@ -49,15 +49,19 @@ describe("DonorSelect", () => {
     expect(screen.getByRole("note", { name: /cdn-cgi\/trace/ })).toBeInTheDocument();
   });
 
-  it("runs the checks again every time the list opens", async () => {
+  it("runs the checks again every time the list opens, but not while they are still running", async () => {
+    checkDonor.mockResolvedValue({ dnsMs: 50, chatgptMs: 40, country: "DE", direct: false, ips: [] });
     const { combobox } = renderSelect();
     expect(checkDonor).toHaveBeenCalledTimes(DNS_DONORS.length);
 
     fireEvent.click(combobox);
+    expect(checkDonor).toHaveBeenCalledTimes(DNS_DONORS.length);
+
+    await act(async () => {});
     fireEvent.click(combobox);
     fireEvent.click(combobox);
 
-    expect(checkDonor).toHaveBeenCalledTimes(DNS_DONORS.length * 3);
+    expect(checkDonor).toHaveBeenCalledTimes(DNS_DONORS.length * 2);
   });
 
   it("selects with the keyboard and closes on Escape", () => {

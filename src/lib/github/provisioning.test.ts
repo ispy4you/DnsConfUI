@@ -422,6 +422,58 @@ describe("provisionDnsConfRepository", () => {
     })).rejects.toThrow("Workflow run finished with conclusion: failure");
   });
 
+  function requestWithRunStatus(runStatus: () => Promise<{ data: { status: string } }>) {
+    const request = vi.fn(async (route: string) => {
+      if (route === "GET /user") return { data: { login: "alice" } };
+      if (route === "GET /repos/{owner}/{repo}") return { data: { fork: true, parent: { full_name: "noVibe/DnsConf" } } };
+      if (route === "GET /repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs") {
+        return { data: { workflow_runs: hasDispatched(request) ? [{ id: 9, html_url: "https://example.test/run/9" }] : [] } };
+      }
+      if (route === "GET /repos/{owner}/{repo}/actions/runs/{run_id}") return runStatus();
+      return { data: {} };
+    });
+    return request;
+  }
+
+  const retainedInput = {
+    sourceOwner: "noVibe",
+    sourceRepo: "DnsConf",
+    workflowFileName: "github_action.yml",
+    payload: {
+      secrets: {},
+      variables: { DNS: "nextdns", DONOR_DNS: "-", BLOCK: "", REDIRECT: "", EXCLUDE_REDIRECT: "" },
+    },
+    retainCredentials: true,
+  };
+
+  it("reports a run that is still in progress after the wait instead of success", async () => {
+    vi.useFakeTimers();
+    try {
+      const steps: string[] = [];
+      const provisioning = provisionDnsConfRepository({
+        ...retainedInput,
+        request: requestWithRunStatus(async () => ({ data: { status: "in_progress" } })),
+        onStep: (step) => { steps.push(step); },
+      });
+      const assertion = expect(provisioning).rejects.toThrow("Workflow run is still in progress");
+
+      await vi.runAllTimersAsync();
+      await assertion;
+      expect(steps).toEqual(["fork", "secrets", "dispatch"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops waiting for the run when GitHub rejects the token", async () => {
+    const request = requestWithRunStatus(async () => {
+      throw Object.assign(new Error("Bad credentials"), { status: 401 });
+    });
+
+    await expect(provisionDnsConfRepository({ ...retainedInput, request })).rejects.toThrow("Bad credentials");
+    expect(request.mock.calls.filter(([route]) => route === "GET /repos/{owner}/{repo}/actions/runs/{run_id}")).toHaveLength(1);
+  });
+
   it("deletes variables with empty values so existing repository values are cleared", async () => {
     const steps: string[] = [];
     const request = vi.fn(async (route: string) => {
@@ -460,6 +512,10 @@ describe("provisionDnsConfRepository", () => {
       "DELETE /repos/{owner}/{repo}/environments/{environment_name}/variables/{name}",
       { owner: "alice", repo: "DnsConf", environment_name: "DNS", name: "BLOCK" },
     );
+    expect(request).toHaveBeenCalledWith(
+      "DELETE /repos/{owner}/{repo}/actions/variables/{name}",
+      { owner: "alice", repo: "DnsConf", name: "BLOCK" },
+    );
     expect(request).not.toHaveBeenCalledWith(
       "POST /repos/{owner}/{repo}/environments/{environment_name}/variables",
       expect.objectContaining({ value: "" }),
@@ -479,7 +535,10 @@ describe("provisionDnsConfRepository", () => {
       if (route === "GET /repos/{owner}/{repo}/actions/secrets/public-key") {
         return { data: { key: "public-key", key_id: "key-id" } };
       }
-      if (route === "DELETE /repos/{owner}/{repo}/environments/{environment_name}/variables/{name}") {
+      if (
+        route === "DELETE /repos/{owner}/{repo}/environments/{environment_name}/variables/{name}" ||
+        route === "DELETE /repos/{owner}/{repo}/actions/variables/{name}"
+      ) {
         throw Object.assign(new Error("Variable not found"), { status: 404 });
       }
       if (route === "GET /repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs") {

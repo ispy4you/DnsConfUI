@@ -144,8 +144,15 @@ export function ProvisionPanel({
       ) : null}
 
       {status === "error" ? (
-        <div className="mt-4 rounded-md border border-coral/30 bg-coral/10 p-3 text-sm text-ink">
-          {message}
+        <div className="mt-4 space-y-3 rounded-md border border-coral/30 bg-coral/10 p-3 text-sm text-ink">
+          <div>{message}</div>
+          {/* A run that was dispatched may still finish, so its page stays one click away. */}
+          {result?.workflowRunUrl ? (
+            <WorkflowRunLink
+              href={result.workflowRunUrl}
+              label={t('provision.openRun')}
+            />
+          ) : null}
         </div>
       ) : null}
     </section>

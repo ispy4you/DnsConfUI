@@ -25,7 +25,7 @@ import {
 import { useLocale } from "@/lib/i18n/context";
 import { SecondaryButton } from "@/components/ui";
 import { useAuth } from "./auth-provider";
-import { CLOUDFLARE_CLIENT_ID_LENGTH, NEXTDNS_CLIENT_ID_LENGTH } from "@/lib/constants";
+import { detectProvider } from "@/lib/constants";
 import { ModeTabs } from "./wizard/mode-tabs";
 import { CredsGuide } from "./wizard/creds-guide";
 import { SourcesSection } from "./wizard/sources-section";
@@ -81,6 +81,15 @@ export function SetupWizard() {
       setGeoBlock(true);
     }
   }, [geoBlock, geoHideChecked, retainedCustomRedirects.length]);
+
+  // Enabling geo-blocking with no list left would send no redirects, so the hosts lists are selected again.
+  const handleGeoBlockChange = useCallback((checked: boolean) => {
+    setGeoBlock(checked);
+    if (checked && !geoHideChecked && !malwChecked && retainedCustomRedirects.length === 0) {
+      setGeoHideChecked(true);
+      setMalwChecked(true);
+    }
+  }, [geoHideChecked, malwChecked, retainedCustomRedirects.length]);
 
   const [quickSteps, setQuickSteps] = useState<{ id: string; status: "pending" | "running" | "done" | "error" | "skipped" }[]>([]);
   const [allProfilesValid, setAllProfilesValid] = useState(false);
@@ -376,9 +385,7 @@ export function SetupWizard() {
       const curId = next[i]?.clientId ?? "";
       if (curId === prevId) continue;
 
-      const len = curId.length;
-      const detected = len === CLOUDFLARE_CLIENT_ID_LENGTH ? "cloudflare" : len === NEXTDNS_CLIENT_ID_LENGTH ? "nextdns" : null;
-      next[i] = { ...next[i], provider: detected ?? "" };
+      next[i] = { ...next[i], provider: detectProvider(curId) ?? "" };
       changed = true;
     }
 
@@ -532,7 +539,7 @@ export function SetupWizard() {
             blockAds={blockAds}
             disguisedTrackers={disguisedTrackers}
             nativeTracking={nativeTracking}
-            onGeoBlockChange={setGeoBlock}
+            onGeoBlockChange={handleGeoBlockChange}
             onGeoHideChange={handleGeoHideChange}
             onMalwChange={handleMalwChange}
             onBlockAdsChange={setBlockAds}

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider, useAuth } from "./auth-provider";
 import { DeviceAuthPanel } from "./device-auth-panel";
@@ -92,5 +92,27 @@ describe("DeviceAuthPanel", () => {
 
     await waitFor(() => expect(screen.getByTestId("token")).toHaveTextContent("github-token"));
     expect(deviceFlowMocks.pollToken).toHaveBeenCalledWith("device-code");
+  });
+
+  it("stops polling the old code when authorization is restarted", async () => {
+    vi.useFakeTimers();
+    try {
+      const device = { verification_uri: "https://github.com/login/device", expires_in: 900, interval: 5 };
+      deviceFlowMocks.requestCode
+        .mockResolvedValueOnce({ ...device, device_code: "old-code", user_code: "AAAA-1111" })
+        .mockResolvedValueOnce({ ...device, device_code: "new-code", user_code: "BBBB-2222" });
+      deviceFlowMocks.pollToken.mockResolvedValue({ error: "authorization_pending" });
+
+      renderPanel();
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Начать подключение к GitHub" })); });
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Перезапустить авторизацию" })); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+
+      expect(screen.getByText("BBBB-2222")).toBeInTheDocument();
+      expect(deviceFlowMocks.pollToken).toHaveBeenCalledTimes(1);
+      expect(deviceFlowMocks.pollToken).toHaveBeenCalledWith("new-code");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
