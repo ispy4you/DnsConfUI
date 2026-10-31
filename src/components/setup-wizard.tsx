@@ -11,7 +11,7 @@ import {
   retainedCredentialsConfigSchema,
   type DnsConfConfig
 } from "@/domain/dnsconf-config";
-import { GEOHIDE_HOSTS_LIST, MALW_HOSTS_LIST, OISD_SMALL_BLOCK_LIST, OISD_SMALL_BLOCK_LIST_WILDCARDS } from "@/domain/toggles";
+import { GEOHIDE_HOSTS_LIST, MALW_HOSTS_LIST, OISD_SMALL_BLOCK_LIST } from "@/domain/toggles";
 import { configureNextDNSProfile, validateCredentials } from "@/lib/nextdns/api";
 import {
   createGitHubRequest,
@@ -180,8 +180,7 @@ export function SetupWizard() {
     const hasGeoHide = config.redirects.includes(GEOHIDE_HOSTS_LIST);
     const hasMalw = config.redirects.includes(MALW_HOSTS_LIST);
     const hasNextDns = config.profiles.some((profile) => profile.provider === "nextdns");
-    const hasCloudflareBlocklist = [OISD_SMALL_BLOCK_LIST, OISD_SMALL_BLOCK_LIST_WILDCARDS]
-      .some((url) => config.blocklists.includes(url));
+    const hasCloudflareBlocklist = config.blocklists.includes(OISD_SMALL_BLOCK_LIST);
 
     form.reset(config);
     setMode("quick");
@@ -588,11 +587,9 @@ export function buildQuickDnsConfConfig({
   blockAds: boolean;
   retainCredentials: boolean;
 }): DnsConfConfig {
-  // Both are recognised to clean up a setup made before, but only the plain list is written.
-  const managedBlocklists = [OISD_SMALL_BLOCK_LIST, OISD_SMALL_BLOCK_LIST_WILDCARDS];
   const canEditBlockAds = !retainCredentials || profiles.every((profile) => profile.provider === "cloudflare");
   const blocklists = retainCredentials
-    ? existingBlocklists.filter((url) => !canEditBlockAds || !managedBlocklists.includes(url))
+    ? existingBlocklists.filter((url) => !canEditBlockAds || url !== OISD_SMALL_BLOCK_LIST)
     : [];
   const redirects = retainCredentials && geoBlock
     ? existingRedirects.filter((url) => url !== GEOHIDE_HOSTS_LIST && url !== MALW_HOSTS_LIST)
